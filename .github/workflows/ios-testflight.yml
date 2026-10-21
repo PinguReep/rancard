@@ -1,0 +1,129 @@
+# Compile l'app iOS sur un Mac GitHub (eas build --local, gratuit sur un dépôt
+# public) puis l'envoie sur TestFlight (eas submit). Aucun Mac requis.
+#
+# Déclenchement : un tag « ios-v… » (git tag ios-v0.1.1 && git push origin ios-v0.1.1)
+# ou à la main (onglet Actions, « iOS → TestFlight », Run workflow).
+# Jamais sur une PR : les forks ne reçoivent aucun secret.
+#
+# Secrets (Settings → Secrets and variables → Actions) :
+#   EXPO_TOKEN      jeton d'accès Expo
+#   EXPO_OWNER      compte Expo propriétaire du projet
+#   EAS_PROJECT_ID  identifiant du projet EAS
+#   APP_BUNDLE_ID   identifiant de l'app (bundle ID)
+#   ASC_APP_ID      identifiant numérique de l'app dans App Store Connect
+#   APPLE_TEAM_ID   Team ID Apple, et APPLE_TEAM_NAME, nom de l'équipe : déclarés
+#                   seulement pour être masqués, car eas-cli les affiche et les
+#                   journaux d'un dépôt public sont publics.
+# Certificat, profil et clé API App Store Connect restent chez Expo.
+#
+# Les journaux complets d'eas build et d'eas submit ne s'affichent jamais :
+# en cas d'échec, seule leur fin apparaît, filtrée. Aucun artefact n'est publié.
+#
+# Numéro de build : géré par EAS (appVersionSource remote, autoIncrement).
+
+name: iOS → TestFlight
+
+on:
+  push:
+    tags: ["ios-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un build lancé n'est jamais annulé : il a déjà consommé un numéro de build.
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  verifications:
+    name: Vérifications
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build et envoi TestFlight
+    needs: verifications
+    # App Store Connect exige le SDK iOS 26 : image macOS 26, Xcode 26.6.
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      # Lus par mobile/app.config.ts ; secrets pour être masqués dans les journaux.
+      EXPO_OWNER: ${{ secrets.EXPO_OWNER }}
+      EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+      APP_BUNDLE_ID: ${{ secrets.APP_BUNDLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_TEAM_NAME: ${{ secrets.APPLE_TEAM_NAME }}
+    steps:
+      - name: Secrets présents ?
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+        run: |
+          manque=""
+          for v in EXPO_TOKEN EXPO_OWNER EAS_PROJECT_ID APP_BUNDLE_ID ASC_APP_ID APPLE_TEAM_ID APPLE_TEAM_NAME; do
+            [ -z "${!v}" ] && manque="$manque $v"
+          done
+          if [ -n "$manque" ]; then
+            echo "::error::Secrets absents :$manque. Rien n'est compilé ni envoyé."
+            exit 1
+          fi
+          # Variantes du nom d'équipe, masquées elles aussi
+          maj=$(printf '%s' "$APPLE_TEAM_NAME" | tr '[:lower:]' '[:upper:]')
+          plat=$(printf '%s' "$APPLE_TEAM_NAME" | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null | tr -d "'\`^~\"" || true)
+          for v in "$maj" "$plat"; do
+            if [ -n "$v" ]; then echo "::add-mask::$v"; fi
+          done
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Xcode 26.6
+        run: |
+          test -d /Applications/Xcode_26.6.app || { echo "::error::Xcode 26.6 absent de l'image macos-26"; exit 1; }
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.16.0
+          package-manager-cache: false  # aucun cache dans le job qui détient les secrets
+
+      - name: Dépendances
+        run: |
+          npm ci --prefix mobile --no-audit --no-fund
+          npm ci --prefix .github/outils --no-audit --no-fund
+
+      - name: Build iOS
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_LOCAL_BUILD_PLUGIN_PATH: ${{ github.workspace }}/.github/outils/node_modules/.bin/eas-cli-local-build-plugin
+        run: |
+          if ! ../.github/outils/node_modules/.bin/eas build --platform ios --profile testflight --local \
+               --non-interactive --freeze-credentials --output "$RUNNER_TEMP/rencar.ipa" \
+               > "$RUNNER_TEMP/build.log" 2>&1; then
+            echo "::error::Échec du build. Fin du journal, filtrée :"
+            tail -n 80 "$RUNNER_TEMP/build.log" \
+              | grep -viE 'team|apple distribution|common name|serial|developer portal|provision|certificate|key id|key name|issuer' || true
+            exit 1
+          fi
+          echo "Build terminé."
+
+      - name: Envoi sur TestFlight
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+        run: |
+          jq --arg id "$ASC_APP_ID" '.submit.testflight.ios.ascAppId = $id' eas.json > "$RUNNER_TEMP/eas.json"
+          cp "$RUNNER_TEMP/eas.json" eas.json
+          if ! ../.github/outils/node_modules/.bin/eas submit --platform ios --profile testflight \
+               --path "$RUNNER_TEMP/rencar.ipa" --non-interactive > "$RUNNER_TEMP/submit.log" 2>&1; then
+            echo "::error::Échec de l'envoi. Fin du journal, filtrée :"
+            tail -n 40 "$RUNNER_TEMP/submit.log" | grep -viE 'team|key id|key name|issuer|apple id' || true
+            exit 1
+          fi
+          echo "Envoi terminé : le build apparaît dans TestFlight après le traitement d'Apple."
+      # Jamais d'upload-artifact : ni journaux, ni IPA.

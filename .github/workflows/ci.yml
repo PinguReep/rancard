@@ -1,0 +1,54 @@
+# Vérifications de l'app à chaque PR, à chaque push sur main et avant chaque
+# build iOS (appelé par ios-testflight.yml). Aucun secret : une PR venue d'un
+# fork tourne avec les mêmes droits, en lecture seule.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Un nouveau push sur la même PR ou la même branche annule l'exécution obsolète.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mobile:
+    name: App mobile
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.16.0
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Provenance du lockfile
+        # Toutes les dépendances viennent du registre npm, avec une empreinte.
+        run: |
+          node -e '
+            const l = require("./package-lock.json"); const ko = [];
+            for (const [p, v] of Object.entries(l.packages)) {
+              if (!p || v.link || v.inBundle) continue;
+              if (!v.integrity || !String(v.resolved).startsWith("https://registry.npmjs.org/")) ko.push(p);
+            }
+            if (ko.length) { console.error(ko.join("\n")); process.exit(1); }'
+      - run: npm ci
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Export web (mode démo)
+        run: npx expo export --platform web --output-dir .export-verif
+        env:
+          EXPO_PUBLIC_BACKEND: demo

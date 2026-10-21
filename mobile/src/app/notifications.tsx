@@ -1,0 +1,95 @@
+/**
+ * Notifications (feuille). Les nouvelles d'abord, puis « Plus tôt ».
+ * Un appui marque la notification lue et ouvre sa cible en remplaçant la
+ * feuille, pour que le retour ramène aux onglets. Seules les notifications
+ * dont la cible est visible avec les accès du membre sont listées.
+ */
+
+import { FlashList } from '@shopify/flash-list';
+import { useRouter, type Href } from 'expo-router';
+import { useMemo } from 'react';
+import { Platform, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { EnteteFeuille } from '@/components/notifications/EnteteFeuille';
+import { LigneNotification } from '@/components/notifications/LigneNotification';
+import { notificationsVisibles } from '@/components/notifications/visibles';
+import { Ecran, Etiquette, Vide } from '@/components/ui';
+import { repo } from '@/data';
+import type { Notification } from '@/domain/types';
+import { useDonnees, useMembre, usePermissions } from '@/state/session';
+
+type Rangee = { type: 'entete'; id: string; titre: string } | { type: 'notif'; id: string; n: Notification; derniere: boolean };
+
+function hrefCible(cible: NonNullable<Notification['cible']>): Href {
+  return (cible.type === 'intervention' ? `/intervention/${cible.id}` : `/appel/${cible.id}`) as Href;
+}
+
+export default function Notifications() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const membre = useMembre();
+  const p = usePermissions();
+  const notifications = useDonnees((s) => s.notifications);
+  const interventions = useDonnees((s) => s.interventions);
+
+  const liste = useMemo(
+    () => notificationsVisibles({ notifications, interventions }, membre, p).sort((a, b) => b.creeLe.localeCompare(a.creeLe)),
+    [notifications, interventions, membre, p],
+  );
+
+  const rangees = useMemo(() => {
+    const nouvelles = liste.filter((n) => !n.lue);
+    const anciennes = liste.filter((n) => n.lue);
+    const out: Rangee[] = [];
+    if (nouvelles.length) {
+      out.push({ type: 'entete', id: 'entete-nouvelles', titre: 'Nouvelles' });
+      nouvelles.forEach((n, i) => out.push({ type: 'notif', id: n.id, n, derniere: i === nouvelles.length - 1 }));
+    }
+    if (anciennes.length) {
+      out.push({ type: 'entete', id: 'entete-anciennes', titre: 'Plus tôt' });
+      anciennes.forEach((n, i) => out.push({ type: 'notif', id: n.id, n, derniere: i === anciennes.length - 1 }));
+    }
+    return out;
+  }, [liste]);
+
+  const nonLues = liste.filter((n) => !n.lue).length;
+
+  function fermer() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/planning');
+  }
+
+  // Marquer lue est un confort : un échec ne doit ni bloquer l'ouverture ni
+  // remonter en rejet non géré ; la pastille reviendra au prochain chargement.
+  function ouvrir(n: Notification) {
+    if (!n.lue) repo().marquerLue(n.id).catch(() => {});
+    if (!n.cible) return;
+    router.replace(hrefCible(n.cible));
+  }
+
+  return (
+    <Ecran sansHaut={Platform.OS === 'ios'}>
+      <EnteteFeuille titre="Notifications" nonLues={nonLues} onToutLire={() => repo().toutMarquerLu(membre.id).catch(() => {})} onFermer={fermer} />
+      {rangees.length === 0 ? (
+        <Vide icone="cloche" titre="Rien de nouveau" texte="Les rendez-vous du site, les fiches du réceptionniste et les accords clients arrivent ici." />
+      ) : (
+        <FlashList
+          data={rangees}
+          keyExtractor={(r) => r.id}
+          getItemType={(r) => r.type}
+          renderItem={({ item }) =>
+            item.type === 'entete' ? (
+              <View className="px-4 pb-2 pt-5">
+                <Etiquette accessibilityRole="header">{item.titre}</Etiquette>
+              </View>
+            ) : (
+              <LigneNotification notification={item.n} derniere={item.derniere} onPress={() => ouvrir(item.n)} />
+            )
+          }
+          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        />
+      )}
+    </Ecran>
+  );
+}

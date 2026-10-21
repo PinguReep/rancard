@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # Actions des workflows, épinglées par SHA
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule: {interval: "weekly", day: "monday", timezone: "Europe/Paris"}
+    cooldown: {default-days: 7}
+    groups:
+      actions: {patterns: ["*"]}
+
+  # App mobile : alertes seulement. Les dépendances se mettent à jour dans le
+  # dépôt de développement (npx expo install --fix), puis sont exportées ici.
+  - package-ecosystem: "npm"
+    directory: "/mobile"
+    schedule: {interval: "weekly"}
+    open-pull-requests-limit: 0
+
+  # Outils de build de la CI (eas-cli et son plugin, à monter ensemble)
+  - package-ecosystem: "npm"
+    directory: "/.github/outils"
+    schedule: {interval: "weekly", day: "monday", timezone: "Europe/Paris"}
+    cooldown: {default-days: 7}
+    groups:
+      eas: {patterns: ["eas-cli*"]}

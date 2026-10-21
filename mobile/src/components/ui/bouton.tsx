@@ -1,0 +1,81 @@
+/**
+ * Boutons. Quatre variantes, une hauteur minimale (48 px, 36 px en compact
+ * avec zone tactile élargie à 44) : l'action principale est toujours pleine,
+ * les autres sont calmes. Les hauteurs sont des minimums pour suivre la
+ * taille de texte du système.
+ */
+
+import type { ReactNode } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+
+import { useTheme } from '@/theme/tokens';
+
+import { impulsion } from './haptique';
+
+type Variante = 'principal' | 'secondaire' | 'discret' | 'danger';
+
+type Props = {
+  children: ReactNode;
+  onPress?: () => void | Promise<void>;
+  variante?: Variante;
+  desactive?: boolean;
+  chargement?: boolean;
+  /** Bouton compact (36 px + zone tactile de 44) pour les barres d'actions */
+  compact?: boolean;
+  icone?: ReactNode;
+  className?: string;
+  accessibilityLabel?: string;
+};
+
+const fond: Record<Variante, string> = {
+  principal: 'bg-accent dark:bg-accent-fond',
+  secondaire: 'bg-surface2 dark:bg-surface2-dark',
+  discret: 'bg-transparent',
+  danger: 'bg-danger-soft dark:bg-danger-softdark',
+};
+
+const texte: Record<Variante, string> = {
+  principal: 'text-white',
+  secondaire: 'text-ink dark:text-ink-dark',
+  discret: 'text-accent dark:text-accent-dark',
+  danger: 'text-danger dark:text-danger-dark',
+};
+
+export function Bouton({
+  children,
+  onPress,
+  variante = 'principal',
+  desactive,
+  chargement,
+  compact,
+  icone,
+  className = '',
+  accessibilityLabel,
+}: Props) {
+  const t = useTheme();
+  const inactif = desactive || chargement;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: inactif, busy: chargement }}
+      disabled={inactif}
+      hitSlop={compact ? 4 : undefined}
+      onPress={() => {
+        impulsion(variante === 'principal' ? 'moyen' : 'leger');
+        void onPress?.();
+      }}
+      className={`flex-row items-center justify-center gap-2 rounded-xl ${compact ? 'min-h-[36px] px-3 py-1.5' : 'min-h-[48px] px-5 py-2.5'} ${fond[variante]} ${
+        inactif ? 'opacity-50' : 'active:opacity-75'
+      } ${className}`}>
+      {chargement ? (
+        <ActivityIndicator color={variante === 'principal' ? t.blanc : t.ink} />
+      ) : (
+        <>
+          {icone ? <View>{icone}</View> : null}
+          <Text className={`${compact ? 'text-[15px]' : 'text-[17px]'} font-semibold ${texte[variante]}`}>{children}</Text>
+        </>
+      )}
+    </Pressable>
+  );
+}

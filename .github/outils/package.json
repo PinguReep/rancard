@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "description": "Outils de build iOS verrouillés pour la CI, hors de mobile/ (eas-cli ne va jamais dans mobile/).",
+  "devDependencies": {
+    "eas-cli": "24.7.0",
+    "eas-cli-local-build-plugin": "24.5.0"
+  }
+}

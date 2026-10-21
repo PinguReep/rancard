@@ -1,0 +1,40 @@
+node_modules/
+.expo/
+dist/
+web-build/
+.export-verif/
+expo-env.d.ts
+*.tsbuildinfo
+.DS_Store
+/mobile/ios
+/mobile/android
+
+# Variables d'environnement : seul .env.example est suivi
+.env
+.env.*
+!.env.example
+
+# Clés, identifiants et sorties de build : jamais dans le dépôt
+*.p8
+*.p12
+*.cer
+*.pem
+*.key
+*.jks
+*.keystore
+*.mobileprovision
+*.provisionprofile
+*.ipa
+*.apk
+*.aab
+*.xcarchive/
+*.dSYM.zip
+build-*.tar.gz
+credentials.json
+credentials/
+google-services.json
+GoogleService-Info.plist
+
+# Réglages locaux d'outils
+.claude/
+CLAUDE.local.md
