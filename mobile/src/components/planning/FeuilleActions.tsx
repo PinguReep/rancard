@@ -6,6 +6,7 @@
 
 import { ScrollView, View } from 'react-native';
 
+import { libelleAutre } from '@/components/intervention/FeuilleMenu';
 import { Feuille, Groupe, Icone, Legende, Ligne, Texte } from '@/components/ui';
 import { actionsPossibles, type Action } from '@/domain/statuts';
 import type { Client, Intervention } from '@/domain/types';
@@ -41,9 +42,9 @@ export function FeuilleActions({ intervention: i, client, peutAttribuer, onFerme
                   key={`${a.type}-${a.vers ?? 'aucun'}`}
                   derniere={idx === actions.length - 1 && !peutAttribuer}
                   onPress={() => onAction(a)}
-                  accessibilityLabel={a.label}>
+                  accessibilityLabel={libelleAutre(a, i.statut)}>
                   <Texte ton={a.principal ? 'accent' : 'ink'} className={`flex-1 ${a.principal ? 'font-semibold' : ''}`}>
-                    {a.label}
+                    {libelleAutre(a, i.statut)}
                   </Texte>
                   {a.principal ? <Icone nom="chevron.droite" taille={16} couleur={t.accent} /> : null}
                 </Ligne>

@@ -33,7 +33,9 @@ export function LigneInterrupteur({ titre, aide, valeur, onChange, desactive, de
           impulsion();
           onChange(v);
         }}
-        trackColor={{ true: t.accent, false: t.line }}
+        trackColor={{ true: t.accentFond, false: t.line }}
+        thumbColor={t.blanc}
+        {...({ activeThumbColor: t.blanc } as object)}
         ios_backgroundColor={t.line}
       />
     </Ligne>

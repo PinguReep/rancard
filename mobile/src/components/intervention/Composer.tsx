@@ -1,24 +1,31 @@
 /**
- * Écrire une note dans le fil : texte, photos ou vidéos, bascule
- * « Visible par le client » (désactivée par défaut).
+ * Écrire une note dans le fil : texte, photos ou vidéos. Un seul choix de
+ * visibilité, en un geste : cadenas « Équipe » (par défaut) ou œil
+ * « Client » (devient une étape de sa page de suivi).
+ *
+ * La fiche appelle `photographier()` depuis sa barre d'action (bouton
+ * Photo) : la photo arrive ici, prête à être publiée.
  */
 
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
-import { Platform, Pressable, Switch, View } from 'react-native';
+import { useImperativeHandle, useState, type Ref } from 'react';
+import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 
-import { Bouton, Carte, Champ, Icone, Legende, Texte, impulsion, type NomIcone } from '@/components/ui';
+import { Bouton, Carte, Icone, impulsion, type NomIcone } from '@/components/ui';
 import { repo } from '@/data';
 import { useMembre } from '@/state/session';
 import { useTheme } from '@/theme/tokens';
 
 type Piece = { uri: string; video?: boolean };
 
+export type ComposerRef = { photographier: () => void };
+
 type Props = {
   interventionId: string;
   /** Message court en cas de problème (permission refusée, échec) */
   onErreur: (message: string) => void;
+  ref?: Ref<ComposerRef>;
 };
 
 function BoutonIcone({ nom, label, onPress }: { nom: NomIcone; label: string; onPress: () => void }) {
@@ -31,12 +38,12 @@ function BoutonIcone({ nom, label, onPress }: { nom: NomIcone; label: string; on
         onPress();
       }}
       className="h-11 w-11 items-center justify-center rounded-full bg-surface2 dark:bg-surface2-dark active:opacity-70">
-      <Icone nom={nom} taille={20} />
+      <Icone nom={nom} taille={19} />
     </Pressable>
   );
 }
 
-export function Composer({ interventionId, onErreur }: Props) {
+export function Composer({ interventionId, onErreur, ref }: Props) {
   const t = useTheme();
   const membre = useMembre();
   const [texte, setTexte] = useState('');
@@ -52,6 +59,10 @@ export function Composer({ interventionId, onErreur }: Props) {
   }
 
   async function photographier() {
+    if (Platform.OS === 'web') {
+      await choisir();
+      return;
+    }
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
@@ -79,6 +90,8 @@ export function Composer({ interventionId, onErreur }: Props) {
     }
   }
 
+  useImperativeHandle(ref, () => ({ photographier: () => void photographier() }));
+
   async function publier() {
     if (vide || envoi) return;
     setEnvoi(true);
@@ -97,15 +110,18 @@ export function Composer({ interventionId, onErreur }: Props) {
 
   return (
     <Carte className="p-3">
-      <Champ
-        type="multiligne"
+      <TextInput
         value={texte}
         onChangeText={setTexte}
-        placeholder="Ajouter une note, une photo…"
+        multiline
+        textAlignVertical="top"
+        placeholder="Ajouter une note…"
+        placeholderTextColor={t.muted}
         accessibilityLabel="Nouvelle note"
+        className="min-h-[64px] px-1 py-1 text-[17px] text-ink dark:text-ink-dark"
       />
       {pieces.length ? (
-        <View className="mb-3 flex-row flex-wrap gap-2">
+        <View className="mb-2 mt-1 flex-row flex-wrap gap-2">
           {pieces.map((p, idx) => (
             <View key={`${p.uri}-${idx}`} className="h-16 w-16 overflow-hidden rounded-xl bg-surface2 dark:bg-surface2-dark">
               {p.video ? (
@@ -127,29 +143,27 @@ export function Composer({ interventionId, onErreur }: Props) {
           ))}
         </View>
       ) : null}
-      <View className="flex-row items-center gap-2">
+      <View className="mt-1 flex-row items-center gap-2">
         {Platform.OS !== 'web' ? <BoutonIcone nom="camera" label="Prendre une photo ou une vidéo" onPress={() => void photographier()} /> : null}
         <BoutonIcone nom="piece-jointe" label="Joindre depuis la galerie" onPress={() => void choisir()} />
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityState={{ checked: visibleClient }}
+          accessibilityLabel={visibleClient ? 'Visible par le client' : 'Réservée à l’équipe'}
+          onPress={() => {
+            impulsion('leger');
+            setVisibleClient((v) => !v);
+          }}
+          className={`h-11 flex-row items-center gap-1.5 rounded-full px-3.5 ${visibleClient ? 'bg-ok-soft dark:bg-ok-softdark' : 'bg-surface2 dark:bg-surface2-dark'} active:opacity-70`}>
+          <Icone nom={visibleClient ? 'oeil' : 'cadenas'} taille={15} couleur={visibleClient ? t.ok : t.muted} />
+          <Text maxFontSizeMultiplier={1.3} className={`text-[14px] font-semibold ${visibleClient ? 'text-ok dark:text-ok-dark' : 'text-muted dark:text-muted-dark'}`}>
+            {visibleClient ? 'Client' : 'Équipe'}
+          </Text>
+        </Pressable>
         <View className="flex-1" />
-        <Bouton compact variante="secondaire" onPress={publier} desactive={vide} chargement={envoi} accessibilityLabel="Publier la note">
+        <Bouton compact variante={vide ? 'secondaire' : 'principal'} onPress={publier} desactive={vide} chargement={envoi} accessibilityLabel="Publier la note">
           Publier
         </Bouton>
-      </View>
-      <View className="mt-3 flex-row items-center justify-between border-t border-line dark:border-line-dark pt-3">
-        <View className="flex-1 pr-3">
-          <Texte>Visible par le client</Texte>
-          <Legende>{visibleClient ? 'Apparaîtra comme une étape sur sa page de suivi.' : 'Note interne, réservée à l’équipe.'}</Legende>
-        </View>
-        <Switch
-          value={visibleClient}
-          onValueChange={(v) => {
-            impulsion('leger');
-            setVisibleClient(v);
-          }}
-          trackColor={{ true: t.accent, false: t.line }}
-          ios_backgroundColor={t.line}
-          accessibilityLabel="Visible par le client"
-        />
       </View>
     </Carte>
   );

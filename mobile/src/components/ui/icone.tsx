@@ -15,9 +15,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Ellipsis,
+  Eye,
+  Flag,
   Lock,
   MessageSquare,
   Paperclip,
+  Pause,
   Phone,
   PhoneCall,
   Plus,
@@ -55,7 +59,11 @@ export type NomIcone =
   | 'horloge'
   | 'lien'
   | 'telephone'
-  | 'message';
+  | 'message'
+  | 'pause'
+  | 'oeil'
+  | 'menu'
+  | 'drapeau';
 
 const SF: Record<NomIcone, string> = {
   planning: 'calendar',
@@ -80,6 +88,10 @@ const SF: Record<NomIcone, string> = {
   lien: 'arrow.up.right',
   telephone: 'phone.arrow.up.right',
   message: 'message',
+  pause: 'pause.fill',
+  oeil: 'eye',
+  menu: 'ellipsis',
+  drapeau: 'flag.fill',
 };
 
 const LUCIDE: Record<NomIcone, LucideIcon> = {
@@ -105,6 +117,10 @@ const LUCIDE: Record<NomIcone, LucideIcon> = {
   lien: ArrowUpRight,
   telephone: PhoneCall,
   message: MessageSquare,
+  pause: Pause,
+  oeil: Eye,
+  menu: Ellipsis,
+  drapeau: Flag,
 };
 
 /** Nom SF Symbol pour les onglets natifs. */

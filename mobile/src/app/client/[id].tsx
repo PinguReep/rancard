@@ -4,8 +4,6 @@
  * action principale « Nouvelle intervention » ancrée en bas.
  */
 
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Linking, Platform, View } from 'react-native';
@@ -121,7 +119,6 @@ export default function FicheClient() {
     }
   }
 
-  const depuis = format(new Date(client.creeLe), 'MMMM yyyy', { locale: fr });
   const plusieursVehicules = mesVehicules.length > 1;
 
   return (
@@ -139,30 +136,25 @@ export default function FicheClient() {
           width: '100%',
           alignSelf: 'center',
         }}>
-        <Titre>
+        <Titre className="text-[30px] leading-[36px]">
           {client.prenom} {client.nom}
         </Titre>
-        <Legende className="mt-1">Client depuis {depuis}</Legende>
 
-        <Groupe className="mt-6" titre="Coordonnées">
+        <Groupe className="mt-5">
           <Ligne
             onPress={() => void Linking.openURL(telHref(client.telephone))}
             derniere={!client.email}
             accessibilityLabel={`Appeler ${formaterTelephone(client.telephone)}`}>
-            <View className="flex-1">
-              <Legende>Mobile</Legende>
-              <Texte ton="accent">{formaterTelephone(client.telephone)}</Texte>
-            </View>
-            <Icone nom="telephone" taille={20} couleur={t.accent} />
+            <Texte ton="accent" className="flex-1 font-mono">
+              {formaterTelephone(client.telephone)}
+            </Texte>
+            <Icone nom="telephone" taille={20} couleur={t.ok} />
           </Ligne>
           {client.email ? (
             <Ligne onPress={() => void Linking.openURL(`mailto:${client.email}`)} derniere accessibilityLabel={`Écrire à ${client.email}`}>
-              <View className="flex-1">
-                <Legende>E-mail</Legende>
-                <Texte ton="accent" numberOfLines={1}>
-                  {client.email}
-                </Texte>
-              </View>
+              <Texte ton="accent" numberOfLines={1} className="flex-1">
+                {client.email}
+              </Texte>
               <Icone nom="lien" taille={20} couleur={t.accent} />
             </Ligne>
           ) : null}
@@ -175,7 +167,7 @@ export default function FicheClient() {
           onChangeText={setMemo}
           onBlur={enregistrerMemo}
           placeholder="Un rappel utile pour l’équipe…"
-          aide={memoEnregistre ? 'Enregistré.' : 'Visible de l’équipe seulement, enregistré automatiquement.'}
+          aide={memoEnregistre ? 'Enregistré.' : undefined}
           className="mb-6"
         />
 

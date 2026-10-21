@@ -62,23 +62,6 @@ export function pluriel(n: number, un: string, plusieurs = `${un}s`): string {
   return `${n} ${n > 1 ? plusieurs : un}`;
 }
 
-export type Compteur = { atelier: number; bloquees: number };
-
-export function compteur(interventions: Intervention[]): Compteur {
-  let atelier = 0;
-  let bloquees = 0;
-  for (const i of interventions) {
-    if (estImmobilisee(i)) atelier += 1;
-    if (estBloquee(i)) bloquees += 1;
-  }
-  return { atelier, bloquees };
-}
-
-export function sousTitreCompteur({ atelier, bloquees }: Compteur): string {
-  const base = atelier === 0 ? 'Aucun véhicule à l’atelier' : `${pluriel(atelier, 'véhicule')} à l’atelier`;
-  return bloquees ? `${base} · ${pluriel(bloquees, 'bloquée')}` : base;
-}
-
 const majuscule = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** « Aujourd’hui », « Demain », « Lundi 21 sept. » */
@@ -91,9 +74,9 @@ export function titreSection(cle: CleSection, jour: Date): string {
     case 'a_valider':
       return 'À valider';
     case 'bloquees':
-      return 'Bloquées, action requise';
+      return 'Bloquées';
     case 'atelier':
-      return `${libelleJour(jour)} à l’atelier`;
+      return libelleJour(jour);
     case 'pretes':
       return 'Prêtes à livrer';
     case 'livrees':

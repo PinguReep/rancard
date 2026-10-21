@@ -1,6 +1,7 @@
 import '@/global.css';
 import '@/theme/interop';
 import '@/lib/push';
+import '@/theme/apparence';
 
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -84,6 +85,10 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="appel/[id]"
+                options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Retour', headerTransparent: Platform.OS === 'ios', headerBlurEffect: 'regular' }}
+              />
+              <Stack.Screen
+                name="activite"
                 options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Retour', headerTransparent: Platform.OS === 'ios', headerBlurEffect: 'regular' }}
               />
               <Stack.Screen

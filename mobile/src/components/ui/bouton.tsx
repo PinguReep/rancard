@@ -8,7 +8,7 @@
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
-import { useTheme } from '@/theme/tokens';
+import { halo, useTheme } from '@/theme/tokens';
 
 import { impulsion } from './haptique';
 
@@ -65,7 +65,8 @@ export function Bouton({
         impulsion(variante === 'principal' ? 'moyen' : 'leger');
         void onPress?.();
       }}
-      className={`flex-row items-center justify-center gap-2 rounded-xl ${compact ? 'min-h-[36px] px-3 py-1.5' : 'min-h-[48px] px-5 py-2.5'} ${fond[variante]} ${
+      style={variante === 'principal' && !inactif && t.scheme === 'dark' ? halo(t.accentFond, compact ? 10 : 18, 0.6) : undefined}
+      className={`flex-row items-center justify-center gap-2 ${compact ? 'min-h-[36px] rounded-xl px-3 py-1.5' : 'min-h-[52px] rounded-2xl px-5 py-2.5'} ${fond[variante]} ${
         inactif ? 'opacity-50' : 'active:opacity-75'
       } ${className}`}>
       {chargement ? (

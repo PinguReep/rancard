@@ -13,9 +13,10 @@ import { filtrerFiches, libelleVehicule, pluriel, type FicheClient } from '@/com
 import { Bouton } from '@/components/ui/bouton';
 import { Groupe, Ligne } from '@/components/ui/carte';
 import { Icone } from '@/components/ui/icone';
-import { Legende, Secondaire, Texte } from '@/components/ui/texte';
+import { Plaque } from '@/components/ui/plaque';
+import { Secondaire, Texte } from '@/components/ui/texte';
 import { Vide } from '@/components/ui/vide';
-import type { Client } from '@/domain/types';
+import type { Client, Vehicule } from '@/domain/types';
 import { useTheme } from '@/theme/tokens';
 
 const MAX_RESULTATS = 30;
@@ -31,7 +32,7 @@ type Props = {
   valeurs: ValeursClient;
   onChangeValeurs: (v: ValeursClient) => void;
   erreurs: ErreursClient;
-  onChoisir: (c: Client) => void;
+  onChoisir: (c: Client, v?: Vehicule) => void;
   onContinuer: () => void;
 };
 
@@ -73,42 +74,37 @@ export function EtapeClient({
   }
 
   const resultats = filtrerFiches(fiches, requete);
-  const visibles = resultats.slice(0, MAX_RESULTATS);
+  // Une ligne par véhicule : on cherche une voiture, on tombe sur la bonne plaque.
+  const lignes = resultats.flatMap<{ f: FicheClient; v?: Vehicule }>((f) => (f.vehicules.length ? f.vehicules.map((v) => ({ f, v })) : [{ f }]));
+  const visibles = lignes.slice(0, MAX_RESULTATS);
 
   return (
     <Animated.View entering={FadeIn.duration(200)}>
-      <BarreRecherche valeur={requete} onChange={onRequete} autoFocus />
+      <BarreRecherche valeur={requete} onChange={onRequete} placeholder="Plaque, nom ou téléphone…" autoFocus />
 
-      {resultats.length ? (
-        <Groupe note={resultats.length > MAX_RESULTATS ? `${pluriel(resultats.length, 'résultat')}, affinez la recherche.` : undefined}>
-          {visibles.map((f, idx) => {
-            const v = f.vehicules[0];
-            const resume = v
-              ? `${libelleVehicule(v)} · ${v.plaque}${f.vehicules.length > 1 ? ` · +${f.vehicules.length - 1}` : ''}`
-              : 'Aucun véhicule';
-            return (
-              <Ligne
-                key={f.client.id}
-                onPress={() => onChoisir(f.client)}
-                derniere={idx === visibles.length - 1}
-                accessibilityLabel={`${f.client.prenom} ${f.client.nom}, ${resume}`}>
-                <AvatarClient client={f.client} taille={36} />
-                <View className="flex-1">
-                  <Texte numberOfLines={1} className="font-semibold">
-                    {f.client.prenom} {f.client.nom}
-                  </Texte>
-                  <Secondaire numberOfLines={1}>{resume}</Secondaire>
-                </View>
-                <Icone nom="chevron.droite" taille={16} couleur={t.faint} />
-              </Ligne>
-            );
-          })}
+      {visibles.length ? (
+        <Groupe note={lignes.length > MAX_RESULTATS ? `${pluriel(lignes.length, 'résultat')}, affinez la recherche.` : undefined}>
+          {visibles.map(({ f, v }, idx) => (
+            <Ligne
+              key={`${f.client.id}-${v?.id ?? 'sans'}`}
+              onPress={() => onChoisir(f.client, v)}
+              derniere={idx === visibles.length - 1}
+              accessibilityLabel={`${f.client.prenom} ${f.client.nom}, ${v ? `${libelleVehicule(v)}, plaque ${v.plaque}` : 'aucun véhicule'}`}>
+              <View className="w-[118px]">{v ? <Plaque plaque={v.plaque} /> : <AvatarClient client={f.client} taille={30} />}</View>
+              <View className="flex-1">
+                <Texte numberOfLines={1} className="font-semibold">
+                  {f.client.prenom} {f.client.nom}
+                </Texte>
+                <Secondaire numberOfLines={1}>{v ? libelleVehicule(v) : 'Aucun véhicule'}</Secondaire>
+              </View>
+              <Icone nom="chevron.droite" taille={15} couleur={t.faint} />
+            </Ligne>
+          ))}
         </Groupe>
       ) : (
         <Vide
           icone={requete ? 'recherche' : 'clients'}
-          titre={requete ? `Aucun client pour “${requete.trim()}”` : 'Aucun client'}
-          texte={requete ? 'Créez la fiche en quelques secondes.' : 'Commencez par créer la fiche du client.'}
+          titre={requete ? `Rien pour « ${requete.trim()} »` : 'Aucun client'}
         />
       )}
 
@@ -119,7 +115,6 @@ export function EtapeClient({
         className="mt-2">
         Nouveau client
       </Bouton>
-      <Legende className="mt-3 text-center">Choisissez un client pour passer au véhicule.</Legende>
     </Animated.View>
   );
 }

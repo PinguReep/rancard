@@ -12,14 +12,10 @@ import { useTheme } from '@/theme/tokens';
 
 export function HistoriqueVehicule({ interventions, onOuvrir }: { interventions: Intervention[]; onOuvrir: (id: string) => void }) {
   const t = useTheme();
+  if (interventions.length === 0) return null;
   return (
     <Groupe titre="Historique du véhicule">
-      {interventions.length === 0 ? (
-        <View className="px-4 py-3">
-          <Legende>Première intervention de ce véhicule, aucune autre n’est enregistrée.</Legende>
-        </View>
-      ) : (
-        interventions.map((i, idx) => (
+      {interventions.map((i, idx) => (
           <Ligne
             key={i.id}
             derniere={idx === interventions.length - 1}
@@ -32,8 +28,7 @@ export function HistoriqueVehicule({ interventions, onOuvrir }: { interventions:
             <PastilleStatut statut={i.statut} court />
             <Icone nom="chevron.droite" taille={16} couleur={t.faint} />
           </Ligne>
-        ))
-      )}
+        ))}
     </Groupe>
   );
 }

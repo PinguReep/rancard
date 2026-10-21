@@ -76,7 +76,7 @@ export const STATUTS_ACTIFS: Statut[] = ['a_valider', 'planifie', 'recu', 'en_co
 
 export const BLOCAGES: Record<Blocage, { label: string; client: string }> = {
   attente_piece: { label: 'Attente pièce', client: 'En attente d’une pièce.' },
-  attente_accord: { label: 'Attente de votre accord', client: 'Un devis vous attend, le garage a besoin de votre accord.' },
+  attente_accord: { label: 'Attente accord', client: 'Un devis vous attend, le garage a besoin de votre accord.' },
   rappeler_client: { label: 'Rappeler le client', client: 'Le garage va vous rappeler.' },
   client_sur_place: { label: 'Client sur place', client: 'Intervention en cours.' },
 };

@@ -10,7 +10,8 @@ import { Pressable, TextInput, View } from 'react-native';
 import { Carte } from '@/components/ui/carte';
 import { impulsion } from '@/components/ui/haptique';
 import { Icone } from '@/components/ui/icone';
-import { Legende, Mono, Secondaire, Texte } from '@/components/ui/texte';
+import { Plaque } from '@/components/ui/plaque';
+import { Legende, Secondaire, Texte } from '@/components/ui/texte';
 import type { Vehicule } from '@/domain/types';
 import { kilometrage } from '@/lib/format';
 import { useTheme } from '@/theme/tokens';
@@ -41,18 +42,12 @@ export function CarteVehicule({ vehicule, onModifierKm }: Props) {
 
   return (
     <Carte className="p-4">
-      <View className="flex-row items-start justify-between gap-3">
+      <Plaque plaque={vehicule.plaque} />
+      <View className="mt-3 flex-row items-center justify-between gap-3">
         <View className="flex-1">
           <Texte className="font-semibold">{libelleVehicule(vehicule)}</Texte>
-          {vehicule.version ? <Secondaire numberOfLines={1}>{vehicule.version}</Secondaire> : null}
+          <Legende numberOfLines={1}>{[vehicule.version, vehicule.annee].filter(Boolean).join(' · ') || ' '}</Legende>
         </View>
-        <View className="rounded-lg bg-surface2 px-2 py-1 dark:bg-surface2-dark">
-          <Mono>{vehicule.plaque}</Mono>
-        </View>
-      </View>
-
-      <View className="mt-3 flex-row items-center justify-between gap-3">
-        <Legende>{vehicule.annee ? `Année ${vehicule.annee}` : 'Année inconnue'}</Legende>
         {edition ? (
           <View className="flex-row items-center gap-2">
             <TextInput

@@ -13,7 +13,7 @@ export type Periode = 'semaine' | 'semaine_derniere' | 'trente_jours';
 
 export const PERIODES: { id: Periode; label: string }[] = [
   { id: 'semaine', label: 'Cette semaine' },
-  { id: 'semaine_derniere', label: 'Semaine dernière' },
+  { id: 'semaine_derniere', label: 'Précédente' },
   { id: 'trente_jours', label: '30 jours' },
 ];
 

@@ -141,13 +141,15 @@ export default function NouvelleIntervention() {
     setEtape(e);
   }
 
-  function choisirClient(c: Client) {
+  /** Une ligne de recherche porte le client et, le plus souvent, un véhicule précis. */
+  function choisirClient(c: Client, vehicule?: Vehicule) {
     impulsion('leger');
     setChoixClient({ mode: 'existant', client: c });
     const vs = vehicules.filter((v) => v.clientId === c.id);
     setAutreVehicule(false);
-    if (vs.length === 1) {
-      setChoixVehicule({ mode: 'existant', vehicule: vs[0] });
+    const choisi = vehicule ?? (vs.length === 1 ? vs[0] : undefined);
+    if (choisi) {
+      setChoixVehicule({ mode: 'existant', vehicule: choisi });
       aller(3);
     } else {
       setChoixVehicule(null);

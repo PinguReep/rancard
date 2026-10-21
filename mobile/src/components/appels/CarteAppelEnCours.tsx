@@ -1,7 +1,7 @@
 /**
  * Appel en cours de traitement par le réceptionniste : carte verte, point
- * qui pulse, durée qui défile, résumé en direct. Deux gestes : écouter
- * (bientôt) et prendre l'appel depuis son propre téléphone.
+ * qui pulse, durée qui défile, résumé en direct, et un geste : prendre
+ * l'appel depuis son propre téléphone.
  */
 
 import { useEffect, useState } from 'react';
@@ -78,15 +78,10 @@ export function CarteAppelEnCours({ appel }: { appel: Appel }) {
       <Etiquette className="mt-4">Résumé en direct</Etiquette>
       <Secondaire className="mt-1">{appel.resume}</Secondaire>
 
-      <View className="mt-5 gap-1.5">
-        <Bouton variante="secondaire" desactive>
-          Écouter en direct
-        </Bouton>
-        <Legende className="mb-2 text-center">Bientôt disponible</Legende>
+      <View className="mt-5">
         <Bouton onPress={prendre} icone={<Icone nom="telephone" taille={18} couleur={t.blanc} />}>
           Prendre l’appel
         </Bouton>
-        <Legende className="text-center">Le transfert se fait depuis votre téléphone.</Legende>
       </View>
     </Animated.View>
   );

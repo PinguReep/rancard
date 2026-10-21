@@ -25,7 +25,7 @@ export function MemoInterne({ intervention: i, onErreur = () => {} }: Props) {
   }
 
   return (
-    <View className="mb-2">
+    <View>
       <Etiquette accessibilityRole="header" className="mb-2 ml-1">
         Mémo interne
       </Etiquette>
@@ -34,9 +34,8 @@ export function MemoInterne({ intervention: i, onErreur = () => {} }: Props) {
         value={memo}
         onChangeText={setMemo}
         onBlur={enregistrer}
-        placeholder="Ex. : passe récupérer entre 14h et 15h."
-        aide="Visible par l’équipe seulement, enregistré automatiquement."
-        accessibilityLabel="Mémo interne"
+        placeholder="Un rappel pour l’équipe…"
+        accessibilityLabel="Mémo interne, visible de l’équipe seulement"
       />
     </View>
   );
@@ -54,7 +53,7 @@ export function MontantEstime({ intervention: i, editable, onErreur = () => {} }
 
   if (!editable) {
     return (
-      <Groupe titre="Montant estimé">
+      <Groupe titre="Montant estimé" className="mb-4">
         <Ligne derniere>
           <Texte className="flex-1">{i.montantEstime != null ? euros(i.montantEstime) : 'Non renseigné'}</Texte>
         </Ligne>
@@ -63,19 +62,11 @@ export function MontantEstime({ intervention: i, editable, onErreur = () => {} }
   }
 
   return (
-    <View className="mb-2">
+    <View>
       <Etiquette accessibilityRole="header" className="mb-2 ml-1">
-        Montant estimé
+        Montant estimé (€ TTC)
       </Etiquette>
-      <Champ
-        type="nombre"
-        value={valeur}
-        onChangeText={setValeur}
-        onBlur={enregistrer}
-        placeholder="0"
-        aide="En euros TTC, indicatif. Visible seulement avec la permission « Voir les montants »."
-        accessibilityLabel="Montant estimé en euros"
-      />
+      <Champ type="nombre" value={valeur} onChangeText={setValeur} onBlur={enregistrer} placeholder="0" accessibilityLabel="Montant estimé en euros TTC" />
     </View>
   );
 }

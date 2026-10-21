@@ -1,13 +1,13 @@
 /**
- * Planning : la journée de l’atelier. Sélecteur de jour, filtre par
- * mécanicien, sections dans l’ordre des décisions à prendre (à valider,
- * bloquées, à l’atelier, prêtes, livrées), bascule liste / par statut,
- * actions rapides à l’appui long. Tout vient du store, tout se met à jour
- * après chaque mutation.
+ * Planning : la journée de l’atelier. « Mes voitures » ou « Tout
+ * l’atelier », sélecteur de jour, puis les sections dans l’ordre des
+ * décisions à prendre (à valider, bloquées, aujourd’hui, prêtes, livrées).
+ * Appui long sur une carte : actions rapides. Tout vient du store et se
+ * met à jour après chaque mutation.
  */
 
 import { FlashList } from '@shopify/flash-list';
-import { startOfDay } from 'date-fns';
+import { addDays, isSameDay, startOfDay } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
@@ -18,33 +18,31 @@ import { Avis } from '@/components/intervention/Avis';
 import { FeuilleAttribution } from '@/components/intervention/FeuilleAttribution';
 import { FeuilleSmsPret } from '@/components/intervention/FeuilleSmsPret';
 import { usePassageStatut } from '@/components/intervention/passage-statut';
-import { BasculeVue, type Vue } from '@/components/planning/BasculeVue';
 import { CarteIntervention } from '@/components/planning/CarteIntervention';
 import { FeuilleActions } from '@/components/planning/FeuilleActions';
-import { FiltreMembres } from '@/components/planning/FiltreMembres';
-import { Kanban } from '@/components/planning/Kanban';
-import {
-  ORDRE_SECTIONS,
-  compteur,
-  libelleJour,
-  sectionDe,
-  sousTitreCompteur,
-  titreSection,
-  trier,
-  visibleCeJour,
-  type CleSection,
-} from '@/components/planning/logique';
+import { ORDRE_SECTIONS, sectionDe, titreSection, trier, visibleCeJour, type CleSection } from '@/components/planning/logique';
 import { SelecteurJour } from '@/components/planning/SelecteurJour';
 import { Bouton, BoutonRond, Ecran, Etiquette, Icone, Legende, Vide, impulsion, useMargeBasse } from '@/components/ui';
+import { Segments } from '@/components/ui/segments';
 import { repo } from '@/data';
 import type { Intervention } from '@/domain/types';
 import { ecrire } from '@/lib/ecrire';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
-import { useTheme } from '@/theme/tokens';
+import { halo, useTheme, type Palette } from '@/theme/tokens';
+
+type Portee = 'moi' | 'tous';
 
 type LignePlanning =
   | { type: 'section'; cle: CleSection; titre: string; nb: number; repliable: boolean; ouverte: boolean }
   | { type: 'carte'; cle: CleSection; intervention: Intervention };
+
+const COULEUR_SECTION: Record<CleSection, keyof Palette> = {
+  a_valider: 'warn',
+  bloquees: 'warn',
+  atelier: 'accent',
+  pretes: 'ok',
+  livrees: 'faint',
+};
 
 export default function Planning() {
   const router = useRouter();
@@ -54,28 +52,32 @@ export default function Planning() {
   const margeBasse = useMargeBasse();
 
   const [jour, setJour] = useState(() => startOfDay(new Date()));
-  const [filtre, setFiltre] = useState<string | null>(null);
-  const [vue, setVue] = useState<Vue>('liste');
+  // Un mécanicien commence par ses voitures ; gérant et réception par l’atelier entier.
+  const [portee, setPortee] = useState<Portee>(() => (p.voirTout && membre.poste !== 'mecanicien' ? 'tous' : 'moi'));
   const [livreesOuvertes, setLivreesOuvertes] = useState(false);
   const [actionsPour, setActionsPour] = useState<string | null>(null);
   const [attribuerPour, setAttribuerPour] = useState<string | null>(null);
   const { executer, passer, cibleSms, fermerSms, avis, montrerAvis } = usePassageStatut();
 
+  const tous = p.voirTout && portee === 'tous';
+
   const d = useDonnees((s) => {
     const visibles = s.interventions.filter((i) => p.voirTout || i.membreId === membre.id);
-    const duJour = visibles
-      .filter((i) => visibleCeJour(i, jour, s.evenements) && (filtre === null || i.membreId === filtre))
-      // Copie superficielle : le dépôt de démonstration modifie les objets en
-      // place, une référence neuve garantit le rafraîchissement des cartes.
-      .map((i) => ({ ...i }))
-      .sort(trier);
+    const duJourTous = visibles.filter((i) => visibleCeJour(i, jour, s.evenements));
+    const duJourMoi = duJourTous.filter((i) => i.membreId === membre.id);
+    // Copie superficielle : le dépôt de démonstration modifie les objets en
+    // place, une référence neuve garantit le rafraîchissement des cartes.
+    const duJour = (tous ? duJourTous : duJourMoi).map((i) => ({ ...i })).sort(trier);
+    const mesRdv = (tous ? visibles : visibles.filter((i) => i.membreId === membre.id)).filter((i) => i.statut !== 'annule');
     return {
       clients: s.clients,
       vehicules: s.vehicules,
       membres: s.membres,
       equipe: s.membres.filter((m) => m.actif && !m.invitationEnAttente),
       duJour,
-      compteur: compteur(visibles),
+      nbMoi: duJourMoi.length,
+      nbTous: duJourTous.length,
+      joursAvecRdv: Array.from({ length: 7 }, (_, k) => addDays(startOfDay(new Date()), k - 3)).filter((j) => mesRdv.some((i) => isSameDay(new Date(i.debut), j))),
     };
   });
 
@@ -95,36 +97,34 @@ export default function Planning() {
 
   const cibleActions = d.duJour.find((i) => i.id === actionsPour) ?? null;
   const cibleAttribution = d.duJour.find((i) => i.id === attribuerPour) ?? null;
-  const prenomFiltre = filtre ? d.equipe.find((m) => m.id === filtre)?.prenom : undefined;
 
   const ouvrir = (id: string) => router.push(`/intervention/${id}`);
   // Les boutons qui l'appellent donnent déjà le retour haptique.
   const nouvelle = () => router.push('/nouvelle-intervention');
   const signaler = (e: Error) => montrerAvis(e.message || 'Impossible de changer le statut.');
 
-  const boutonPlus = p.creer ? <BoutonRond nom="plus" label="Nouvelle intervention" onPress={nouvelle} accent /> : undefined;
-
   const entete = (
     <View className="pb-1">
-      <Entete titre="Planning" sousTitre={sousTitreCompteur(d.compteur)} droite={boutonPlus} />
-      <View className="mb-2 flex-row items-center justify-between px-4">
-        <Etiquette>{libelleJour(jour)}</Etiquette>
-        <BasculeVue vue={vue} onChanger={setVue} />
-      </View>
-      <SelecteurJour jour={jour} onChanger={setJour} />
+      <Entete titre="Planning" droite={p.creer ? <BoutonRond nom="plus" label="Nouvelle intervention" onPress={nouvelle} accent /> : undefined} />
       {p.voirTout ? (
-        <View className="mt-3">
-          <FiltreMembres membres={d.equipe} selection={filtre} onChanger={setFiltre} />
-        </View>
+        <Segments<Portee>
+          options={[
+            { id: 'moi', label: 'Mes voitures', compte: d.nbMoi },
+            { id: 'tous', label: 'Tout l’atelier', compte: d.nbTous },
+          ]}
+          valeur={portee}
+          onChange={setPortee}
+          className="mx-4 mb-4"
+        />
       ) : null}
+      <SelecteurJour jour={jour} onChanger={setJour} aDesRendezVous={(j) => d.joursAvecRdv.some((x) => isSameDay(x, j))} />
     </View>
   );
 
   const vide = (
     <Vide
       icone="planning"
-      titre={prenomFiltre ? `Rien pour ${prenomFiltre} ce jour` : 'Rien de prévu ce jour'}
-      texte="Aucun rendez-vous ne tombe ce jour et aucun véhicule n’est immobilisé."
+      titre={tous ? 'Rien de prévu ce jour' : 'Aucune voiture pour vous ce jour'}
       action={
         p.creer ? (
           <Bouton variante="secondaire" onPress={nouvelle} accessibilityLabel="Créer une nouvelle intervention">
@@ -137,11 +137,12 @@ export default function Planning() {
 
   function rendre({ item }: { item: LignePlanning }) {
     if (item.type === 'section') {
+      const couleur = t[COULEUR_SECTION[item.cle]];
       return (
-        <View className="flex-row items-center justify-between px-5 pb-2 pt-5">
-          <View className="flex-row items-center gap-1.5">
-            {item.cle === 'bloquees' ? <Icone nom="alerte" taille={14} couleur={t.warn} /> : null}
-            <Etiquette style={item.cle === 'bloquees' ? { color: t.warn } : undefined}>
+        <View className="flex-row items-center justify-between px-5 pb-2.5 pt-6">
+          <View className="flex-row items-center gap-2">
+            <View className="h-[7px] w-[7px] rounded-full" style={[{ backgroundColor: couleur }, t.scheme === 'dark' ? halo(couleur, 6, 0.9) : null]} />
+            <Etiquette>
               {item.titre} · {item.nb}
             </Etiquette>
           </View>
@@ -165,12 +166,13 @@ export default function Planning() {
     const i = item.intervention;
     const client = clientDe(i);
     return (
-      <Animated.View entering={FadeIn.duration(200)} className="px-4 pb-2">
+      <Animated.View entering={FadeIn.duration(200)} className="px-4 pb-2.5">
         <CarteIntervention
           intervention={i}
           client={client}
           vehicule={vehiculeDe(i)}
           mecanicien={mecanicienDe(i)}
+          avecMecanicien={tous}
           jour={jour}
           onPress={() => ouvrir(i.id)}
           onLongPress={() => setActionsPour(i.id)}
@@ -193,36 +195,17 @@ export default function Planning() {
 
   return (
     <Ecran>
-      {vue === 'liste' ? (
-        <FlashList
-          data={lignes}
-          renderItem={rendre}
-          keyExtractor={(l) => (l.type === 'section' ? `s-${l.cle}` : l.intervention.id)}
-          getItemType={(l) => l.type}
-          ListHeaderComponent={entete}
-          ListEmptyComponent={vide}
-          contentContainerStyle={{ paddingBottom: margeBasse }}
-          extraData={d}
-          showsVerticalScrollIndicator={false}
-        />
-      ) : (
-        <View className="flex-1">
-          {entete}
-          {d.duJour.length === 0 ? (
-            vide
-          ) : (
-            <Kanban
-              interventions={d.duJour}
-              clients={d.clients}
-              vehicules={d.vehicules}
-              membres={d.membres}
-              jour={jour}
-              onOuvrir={ouvrir}
-              onActions={setActionsPour}
-            />
-          )}
-        </View>
-      )}
+      <FlashList
+        data={lignes}
+        renderItem={rendre}
+        keyExtractor={(l) => (l.type === 'section' ? `s-${l.cle}` : l.intervention.id)}
+        getItemType={(l) => l.type}
+        ListHeaderComponent={entete}
+        ListEmptyComponent={vide}
+        contentContainerStyle={{ paddingBottom: margeBasse }}
+        extraData={d}
+        showsVerticalScrollIndicator={false}
+      />
 
       <FeuilleActions
         intervention={cibleActions}

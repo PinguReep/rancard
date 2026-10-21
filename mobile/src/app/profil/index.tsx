@@ -1,5 +1,6 @@
 /**
- * Profil (modale avec pile) : identité, accès au garage et à l'équipe pour
+ * Profil (modale avec pile) : identité, apparence (sombre, clair, auto),
+ * activité, accès au garage et à l’équipe pour
  * le gérant, notifications push, compte, déconnexion, à propos.
  */
 
@@ -14,10 +15,12 @@ import { CarteIdentite } from '@/components/profil/CarteIdentite';
 import { LigneNavigation } from '@/components/profil/LigneNavigation';
 import { LignePush } from '@/components/profil/LignePush';
 import { useMembreCourant } from '@/components/profil/useMembreCourant';
-import { Ecran, FeuilleConfirmation, Groupe, impulsion } from '@/components/ui';
+import { Ecran, FeuilleConfirmation, Groupe, Legende, impulsion } from '@/components/ui';
+import { Segments } from '@/components/ui/segments';
 import { BACKEND, repo, type Repo } from '@/data';
 import { estGerant } from '@/domain/permissions';
-import { useDonnees, useSession } from '@/state/session';
+import { useDonnees, usePermissions, useSession } from '@/state/session';
+import { useApparence, type ChoixApparence } from '@/theme/apparence';
 
 type Feuille = 'deconnexion' | 'reinitialisation' | null;
 
@@ -25,6 +28,9 @@ export default function Profil() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const membre = useMembreCourant();
+  const p = usePermissions();
+  const apparence = useApparence((s) => s.choix);
+  const choisirApparence = useApparence((s) => s.choisir);
   // Membres actifs, invitations en attente exclues (pas encore de compte).
   const actifs = useDonnees((s) => s.membres.filter((m) => m.actif && !m.invitationEnAttente).length);
   const deconnecter = useSession((s) => s.deconnecter);
@@ -67,7 +73,19 @@ export default function Profil() {
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }} contentInsetAdjustmentBehavior="automatic">
         <CarteIdentite membre={membre} className="mb-6" />
 
+        <Segments<ChoixApparence>
+          options={[
+            { id: 'sombre', label: 'Sombre' },
+            { id: 'clair', label: 'Clair' },
+            { id: 'systeme', label: 'Auto' },
+          ]}
+          valeur={apparence}
+          onChange={choisirApparence}
+          className="mb-6"
+        />
+
         <Groupe titre="Garage">
+          {p.activite ? <LigneNavigation titre="Activité" onPress={() => router.push('/activite')} /> : null}
           {gerant ? (
             <LigneNavigation titre="Équipe" valeur={`${actifs} membre${actifs > 1 ? 's' : ''}`} onPress={() => router.push('/profil/equipe')} />
           ) : null}
@@ -81,14 +99,15 @@ export default function Profil() {
           <LigneNavigation titre="Se déconnecter" ton="danger" onPress={() => setFeuille('deconnexion')} derniere />
         </Groupe>
 
-        <Groupe
-          titre="À propos"
-          note={BACKEND === 'demo' ? 'Mode démonstration : tout reste sur ce téléphone, rien n’est envoyé à un serveur.' : undefined}>
-          <LigneNavigation titre="Version" valeur={version ? `Rencar ${version}` : 'Rencar'} />
-          <LigneNavigation titre="Mode" valeur={BACKEND === 'demo' ? 'Démonstration' : 'Serveur Rencar'} derniere={!peutReinitialiser} />
-          {peutReinitialiser ? <LigneNavigation titre="Réinitialiser la démonstration" onPress={() => setFeuille('reinitialisation')} derniere /> : null}
-        </Groupe>
-        <View className="h-2" />
+        {peutReinitialiser ? (
+          <Groupe>
+            <LigneNavigation titre="Réinitialiser la démonstration" onPress={() => setFeuille('reinitialisation')} derniere />
+          </Groupe>
+        ) : null}
+        <Legende className="mt-1 text-center">
+          Rencar {version}
+          {BACKEND === 'demo' ? ' · démonstration' : ''}
+        </Legende>
       </ScrollView>
 
       <FeuilleConfirmation

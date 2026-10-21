@@ -90,7 +90,9 @@ export function LigneHoraire({ jour, plage, onChange, derniere }: Props) {
           impulsion();
           onChange(ouvert ? PLAGE_PAR_DEFAUT : null);
         }}
-        trackColor={{ true: t.accent, false: t.line }}
+        trackColor={{ true: t.accentFond, false: t.line }}
+        thumbColor={t.blanc}
+        {...({ activeThumbColor: t.blanc } as object)}
         ios_backgroundColor={t.line}
       />
     </Ligne>

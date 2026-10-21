@@ -6,10 +6,11 @@
 import { Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { Avatar, Legende, Pastille, Texte } from '@/components/ui';
+import { Carte, Icone, Legende, Texte } from '@/components/ui';
 import { BLOCAGES, ORIGINES, STATUTS } from '@/domain/statuts';
 import type { Blocage, Commentaire, Evenement, Membre, Origine, Statut } from '@/domain/types';
 import { ilYA } from '@/lib/format';
+import { useTheme } from '@/theme/tokens';
 
 import { PhotosGrille } from './PhotosGrille';
 
@@ -49,28 +50,25 @@ function texteEvenement(e: Evenement, parId: Map<string, Membre>): string {
   }
 }
 
-function LigneCommentaire({ c, membre }: { c: Commentaire; membre?: Membre }) {
+function LigneCommentaire({ c }: { c: Commentaire }) {
+  const t = useTheme();
   return (
-    <Animated.View entering={FadeIn.duration(200)} className="flex-row gap-3">
-      {membre ? (
-        <Avatar membre={membre} taille={32} />
-      ) : (
-        <View
-          accessibilityLabel={c.auteurNom}
-          className="h-8 w-8 items-center justify-center rounded-full bg-surface2 dark:bg-surface2-dark">
-          <Text className="text-[12px] font-bold text-muted dark:text-muted-dark">{c.auteurNom.charAt(0).toUpperCase()}</Text>
+    <Animated.View entering={FadeIn.duration(200)}>
+      <Carte className="px-4 py-3">
+        <View className="flex-row items-center gap-2">
+          <Legende className="flex-1 font-semibold" numberOfLines={1}>
+            {c.auteurNom} · {ilYA(c.creeLe)}
+          </Legende>
+          <View className="flex-row items-center gap-1" accessibilityLabel={c.visibleClient ? 'Visible par le client' : 'Réservée à l’équipe'}>
+            <Icone nom={c.visibleClient ? 'oeil' : 'cadenas'} taille={13} couleur={c.visibleClient ? t.ok : t.muted} />
+            <Text maxFontSizeMultiplier={1.3} className={`text-[13px] font-semibold ${c.visibleClient ? 'text-ok dark:text-ok-dark' : 'text-muted dark:text-muted-dark'}`}>
+              {c.visibleClient ? 'Client' : 'Équipe'}
+            </Text>
+          </View>
         </View>
-      )}
-      <View className="flex-1 rounded-2xl border border-line dark:border-line-dark bg-surface dark:bg-surface-dark p-3">
-        <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
-          <Texte className="text-[15px] font-semibold">{c.auteurNom}</Texte>
-          <Legende>{ilYA(c.creeLe)}</Legende>
-          <View className="flex-1" />
-          <Pastille label={c.visibleClient ? 'Visible par le client' : 'Interne'} ton={c.visibleClient ? 'ok' : 'muted'} />
-        </View>
-        {c.texte ? <Texte className="mt-1.5">{c.texte}</Texte> : null}
+        {c.texte ? <Texte className="mt-1">{c.texte}</Texte> : null}
         <PhotosGrille photos={c.photos} />
-      </View>
+      </Carte>
     </Animated.View>
   );
 }
@@ -94,14 +92,14 @@ export function FilSuivi({ commentaires, evenements, membres }: Props) {
   ].sort((a, b) => a.date.localeCompare(b.date));
 
   if (entrees.length === 0) {
-    return <Legende className="px-1">Aucune note pour l’instant.</Legende>;
+    return null;
   }
 
   return (
-    <View className="gap-3">
+    <View className="gap-2">
       {entrees.map((x) =>
         x.type === 'commentaire' ? (
-          <LigneCommentaire key={x.cle} c={x.c} membre={x.c.auteurId ? parId.get(x.c.auteurId) : undefined} />
+          <LigneCommentaire key={x.cle} c={x.c} />
         ) : (
           <LigneEvenement key={x.cle} texte={texteEvenement(x.e, parId)} date={x.e.creeLe} />
         ),

@@ -37,7 +37,7 @@ export function LigneAppel({ appel, onPress }: { appel: Appel; onPress?: () => v
           </View>
         ) : null}
       </View>
-      <Secondaire numberOfLines={2} className="mt-2">
+      <Secondaire numberOfLines={1} className="mt-1.5">
         {appel.resume}
       </Secondaire>
       <View className="mt-3 flex-row flex-wrap items-center gap-2">

@@ -1,5 +1,5 @@
 /**
- * Bouton rond à icône, une seule taille (40 pt + zone tactile élargie à 44) :
+ * Bouton rond à icône, une seule taille (44 pt) :
  * cloche et « + » des en-têtes, « Fermer » des modales et des feuilles.
  */
 
@@ -34,7 +34,7 @@ export function BoutonRond({ nom, label, onPress, accent, children, className = 
         impulsion();
         onPress();
       }}
-      className={`h-10 w-10 items-center justify-center rounded-full bg-surface2 dark:bg-surface2-dark active:opacity-70 ${className}`}>
+      className={`h-11 w-11 items-center justify-center rounded-full border border-line bg-surface2 dark:border-line-dark dark:bg-surface2-dark active:opacity-70 ${className}`}>
       <Icone nom={nom} taille={18} couleur={accent ? t.accent : t.ink} poids={nom === 'fermer' ? 'bold' : 'medium'} />
       {children}
     </Pressable>

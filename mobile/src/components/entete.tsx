@@ -1,9 +1,12 @@
 /**
- * En-tête des onglets : nom du garage en petit, grand titre, cloche avec
- * compteur, avatar vers le profil. Même en-tête sur les quatre onglets.
- * Le compteur ne compte que les notifications dont la cible est visible.
+ * En-tête des onglets : la date en petit, le grand titre, puis à droite les
+ * gestes du moment (« + »), la cloche avec son compteur et l'avatar vers le
+ * profil. Le compteur ne compte que les notifications dont la cible est
+ * visible.
  */
 
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -14,44 +17,46 @@ import { BoutonRond } from '@/components/ui/bouton-rond';
 import { impulsion } from '@/components/ui/haptique';
 import { Legende, Titre } from '@/components/ui/texte';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
+import { halo, useTheme } from '@/theme/tokens';
 
-export function Entete({ titre, sousTitre, droite }: { titre: string; sousTitre?: string; droite?: ReactNode }) {
+const majuscule = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+export function Entete({ titre, droite, sansDate }: { titre: string; droite?: ReactNode; sansDate?: boolean }) {
   const router = useRouter();
+  const t = useTheme();
   const membre = useMembre();
   const p = usePermissions();
-  const garage = useDonnees((s) => s.garage);
   const nonLues = useDonnees((s) => notificationsVisibles(s, membre, p).filter((n) => !n.lue).length);
 
   return (
-    <View className="px-4 pt-2 pb-3">
-      <View className="flex-row items-center justify-between">
-        <Legende numberOfLines={1} className="flex-1 uppercase tracking-[1.5px] text-[11px] font-semibold">
-          {garage.nom}
-        </Legende>
-        <View className="flex-row items-center gap-2">
-          {droite}
-          <BoutonRond nom="cloche" label={nonLues ? `Notifications, ${nonLues} non lues` : 'Notifications'} onPress={() => router.push('/notifications')}>
-            {nonLues > 0 ? (
-              <View className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] items-center justify-center rounded-full bg-danger dark:bg-danger-dark px-1">
-                <Text className="text-white text-[11px] font-bold">{nonLues > 9 ? '9+' : nonLues}</Text>
-              </View>
-            ) : null}
-          </BoutonRond>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Profil et réglages"
-            hitSlop={4}
-            onPress={() => {
-              impulsion();
-              router.push('/profil');
-            }}
-            className="active:opacity-70">
-            <Avatar membre={membre} taille={40} />
-          </Pressable>
-        </View>
+    <View className="flex-row items-end justify-between px-5 pb-4 pt-3">
+      <View className="flex-1">
+        {sansDate ? null : <Legende className="text-[14px] font-medium">{majuscule(format(new Date(), 'EEEE d MMMM', { locale: fr }))}</Legende>}
+        <Titre className="mt-0.5 text-[34px] leading-[40px]">{titre}</Titre>
       </View>
-      <Titre className="mt-2">{titre}</Titre>
-      {sousTitre ? <Legende className="mt-1">{sousTitre}</Legende> : null}
+      <View className="mb-1 flex-row items-center gap-2.5">
+        {droite}
+        <BoutonRond nom="cloche" label={nonLues ? `Notifications, ${nonLues} non lues` : 'Notifications'} onPress={() => router.push('/notifications')}>
+          {nonLues > 0 ? (
+            <View
+              className="absolute -right-1 -top-1 h-[19px] min-w-[19px] items-center justify-center rounded-full bg-danger px-1 dark:bg-danger-dark"
+              style={t.scheme === 'dark' ? halo(t.danger, 8, 0.8) : undefined}>
+              <Text className="text-[11px] font-bold text-white">{nonLues > 9 ? '9+' : nonLues}</Text>
+            </View>
+          ) : null}
+        </BoutonRond>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Profil et réglages"
+          hitSlop={4}
+          onPress={() => {
+            impulsion();
+            router.push('/profil');
+          }}
+          className="active:opacity-70">
+          <Avatar membre={membre} taille={44} />
+        </Pressable>
+      </View>
     </View>
   );
 }

@@ -192,7 +192,9 @@ export function EtapeIntervention({ valeurs, onChange, erreurs, garage, membres,
               impulsion('leger');
               maj({ prioritaire });
             }}
-            trackColor={{ true: t.accent, false: t.line }}
+            trackColor={{ true: t.accentFond, false: t.line }}
+        thumbColor={t.blanc}
+        {...({ activeThumbColor: t.blanc } as object)}
             ios_backgroundColor={t.line}
             accessibilityLabel="Prioritaire"
           />

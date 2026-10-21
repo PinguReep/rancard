@@ -128,7 +128,7 @@ export default function ReglagesGarage() {
           <Champ libelle="Téléphone" type="telephone" value={telephone} onChangeText={setTelephone} onBlur={validerTelephone} className="mb-0" />
         </Section>
 
-        <Groupe titre="Horaires" note="Servent au SMS « véhicule prêt » et à repérer les appels hors horaires.">
+        <Groupe titre="Horaires">
           {ORDRE_JOURS.map((jour, i) => (
             <LigneHoraire key={jour} jour={jour} plage={garage.horaires[jour] ?? null} onChange={(p) => horaire(jour, p)} derniere={i === ORDRE_JOURS.length - 1} />
           ))}

@@ -1,10 +1,8 @@
 /**
  * Appel dont le réceptionniste a créé une fiche à valider : résumé, fiche
  * proposée (véhicule, prestation, créneau) et le geste suivant évident,
- * « Valider et planifier ». Comme le « Confirmer » du planning, il reste en
- * bouton secondaire à icône d’accent : une seule action principale par
- * écran (« Prendre l’appel » quand un appel est en cours). Ignorer demande
- * une confirmation.
+ * « Valider et planifier », en bouton principal. Ignorer demande une
+ * confirmation.
  */
 
 import { useState } from 'react';
@@ -78,7 +76,7 @@ export function CarteAppelAValider({ appel, intervention, vehicule, chargement, 
       </View>
 
       <View className="mt-4 gap-2">
-        <Bouton variante="secondaire" icone={<Icone nom="valider" taille={16} couleur={t.accent} />} onPress={onValider} chargement={chargement}>
+        <Bouton icone={<Icone nom="valider" taille={18} couleur={t.blanc} />} onPress={onValider} chargement={chargement}>
           Valider et planifier
         </Bouton>
         <View className="flex-row gap-2">

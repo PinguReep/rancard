@@ -6,7 +6,6 @@
  */
 
 import { FlashList } from '@shopify/flash-list';
-import { isToday } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
@@ -35,16 +34,14 @@ export default function Appels() {
   const [enTraitement, setEnTraitement] = useState<string | null>(null);
   const [avis, montrerAvis] = useAvis();
 
-  const { enCours, aValider, historique, sousTitre } = useMemo(() => {
+  const { enCours, aValider, historique } = useMemo(() => {
     const enCours = appels.find((a) => a.enCours) ?? null;
     const aValider = appels
       .filter((a) => !a.enCours && a.interventionId && interventions.find((i) => i.id === a.interventionId)?.statut === 'a_valider')
       .sort((a, b) => b.debut.localeCompare(a.debut));
     const ids = new Set(aValider.map((a) => a.id));
     const historique = appels.filter((a) => !a.enCours && !ids.has(a.id)).sort((a, b) => b.debut.localeCompare(a.debut));
-    const jour = appels.filter((a) => isToday(new Date(a.debut)));
-    const hors = jour.filter((a) => a.horsHoraires).length;
-    return { enCours, aValider, historique, sousTitre: `${jour.length} aujourd’hui · ${hors} hors horaires` };
+    return { enCours, aValider, historique };
   }, [appels, interventions]);
 
   if (!p.appels) {
@@ -94,7 +91,7 @@ export default function Appels() {
 
   const entete = (
     <View>
-      <Entete titre="Appels" sousTitre={sousTitre} />
+      <Entete titre="Appels" sansDate />
       {enCours ? <CarteAppelEnCours appel={enCours} /> : null}
       {aValider.length ? (
         <View className="mb-6 px-4">

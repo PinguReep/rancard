@@ -1,47 +1,68 @@
 /**
- * Carte d’une intervention dans le planning : l’essentiel en un regard,
- * appui = fiche, appui long = actions rapides. `compacte` pour le kanban.
+ * Carte d’une intervention dans le planning. Ce que le mécanicien cherche
+ * d’abord : la plaque et le modèle, puis le travail, puis où en est la
+ * voiture (piste d’avancement ou blocage). Appui = fiche, appui long =
+ * actions rapides.
  */
 
-import { format } from 'date-fns';
+import { format, isSameDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { isSameDay } from 'date-fns';
 import type { ReactNode } from 'react';
-import { Platform, Pressable, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
-import { Avatar, Carte, Legende, Mono, PastilleBlocage, PastilleOrigine, PastilleStatut, Secondaire, Texte, impulsion } from '@/components/ui';
-import { STATUTS, estBloquee } from '@/domain/statuts';
-import type { Client, Intervention, Membre, Vehicule } from '@/domain/types';
+import { Avatar, Carte, Icone, Legende, Plaque, PisteAvancement, Secondaire, Texte, impulsion } from '@/components/ui';
+import { BLOCAGES, STATUTS, estBloquee } from '@/domain/statuts';
+import type { Client, Intervention, Membre, Statut, Vehicule } from '@/domain/types';
 import { heure } from '@/lib/format';
-import { useTheme } from '@/theme/tokens';
+import { useTheme, type Palette } from '@/theme/tokens';
 
 type Props = {
   intervention: Intervention;
   client?: Client;
   vehicule?: Vehicule;
   mecanicien?: Membre | null;
-  /** Jour affiché : l’heure seule si le créneau tombe ce jour, sinon la date */
+  /** Montrer l’avatar du mécanicien (vue « Tout l’atelier ») */
+  avecMecanicien?: boolean;
+  /** Jour affiché : l’heure seule si le créneau tombe ce jour, sinon le jour aussi */
   jour?: Date;
-  compacte?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
   /** Contenu sous la carte (bouton « Confirmer » par exemple) */
   pied?: ReactNode;
 };
 
-export function CarteIntervention({ intervention: i, client, vehicule, mecanicien, jour, compacte, onPress, onLongPress, pied }: Props) {
+/** Mot court de l’état, et sa couleur. */
+function etat(statut: Statut, t: Palette): { mot: string; couleur: string } {
+  switch (statut) {
+    case 'a_valider':
+      return { mot: 'À valider', couleur: t.warn };
+    case 'planifie':
+      return { mot: 'À recevoir', couleur: t.muted };
+    case 'termine':
+      return { mot: 'Prêt', couleur: t.ok };
+    case 'livre':
+    case 'annule':
+      return { mot: STATUTS[statut].court, couleur: t.muted };
+    default:
+      return { mot: STATUTS[statut].court, couleur: t.accent };
+  }
+}
+
+export function CarteIntervention({ intervention: i, client, vehicule, mecanicien, avecMecanicien, jour, onPress, onLongPress, pied }: Props) {
   const t = useTheme();
   const nomClient = client ? `${client.prenom} ${client.nom}` : 'Client inconnu';
-  const nomVehicule = vehicule ? `${vehicule.marque} ${vehicule.modele}` : '';
+  const modele = vehicule ? `${vehicule.marque} ${vehicule.modele}` : 'Véhicule inconnu';
   const memeJour = !jour || isSameDay(new Date(i.debut), jour);
-  const bloquee = estBloquee(i) && i.blocage;
+  const quand = memeJour ? heure(i.debut) : `${format(new Date(i.debut), 'EEE', { locale: fr }).replace('.', '')} ${heure(i.debut)}`;
+  const bloquee = estBloquee(i) && i.blocage ? i.blocage : null;
+  const e = etat(i.statut, t);
 
   const label = [
     i.prioritaire ? 'Prioritaire' : null,
-    nomClient,
-    nomVehicule,
+    vehicule ? `${modele}, plaque ${vehicule.plaque}` : modele,
     i.prestation,
-    STATUTS[i.statut].label,
+    nomClient,
+    bloquee ? BLOCAGES[bloquee].label : STATUTS[i.statut].label,
     mecanicien ? `attribuée à ${mecanicien.prenom}` : 'non attribuée',
   ]
     .filter(Boolean)
@@ -67,56 +88,55 @@ export function CarteIntervention({ intervention: i, client, vehicule, mecanicie
       }
       delayLongPress={350}
       className="active:opacity-80">
-      <Carte className={compacte ? 'p-3' : 'p-4'}>
-        <View className="flex-row items-start gap-3">
-          <View className={compacte ? 'w-11' : 'w-12'}>
-            {memeJour ? (
-              <Texte className="font-semibold">{heure(i.debut)}</Texte>
+      <Carte className="px-4 pb-3.5 pt-4">
+        <View className="flex-row items-center gap-2.5">
+          {vehicule ? <Plaque plaque={vehicule.plaque} /> : null}
+          <Secondaire ton="ink" className="flex-1 font-medium" numberOfLines={1}>
+            {vehicule ? `${vehicule.marque} ${vehicule.modele}` : modele}
+          </Secondaire>
+          <Text maxFontSizeMultiplier={1.4} className="font-mono text-[14px] text-muted dark:text-muted-dark">
+            {quand}
+          </Text>
+        </View>
+
+        <View className="mt-3 flex-row items-center gap-2">
+          {i.prioritaire ? <View accessibilityLabel="Prioritaire" className="h-2 w-2 rounded-full bg-danger dark:bg-danger-dark" /> : null}
+          <Texte className="flex-1 text-[19px] font-bold leading-[24px] tracking-tight" numberOfLines={2}>
+            {i.prestation}
+          </Texte>
+        </View>
+
+        <View className="mt-1 flex-row items-center gap-2">
+          <Legende className="flex-1 text-[14px]" numberOfLines={1}>
+            {client ? nomClient : 'Client inconnu'}
+            {i.memo ? ` · ${i.memo}` : ''}
+          </Legende>
+          {avecMecanicien ? (
+            mecanicien ? (
+              <Avatar membre={mecanicien} taille={24} />
             ) : (
-              <>
-                <Legende className="font-semibold">{format(new Date(i.debut), 'EEE d', { locale: fr }).replace('.', '')}</Legende>
-                <Legende>{heure(i.debut)}</Legende>
-              </>
-            )}
-          </View>
-          <View className="flex-1">
-            <View className="flex-row items-center gap-2">
-              {i.prioritaire ? <View accessibilityLabel="Prioritaire" className="h-2 w-2 rounded-full bg-danger dark:bg-danger-dark" /> : null}
-              <Texte className="flex-1 font-semibold" numberOfLines={1}>
-                {nomClient}
-              </Texte>
+              <View accessibilityLabel="Non attribué" className="h-6 w-6 rounded-full border border-dashed border-faint dark:border-faint-dark" />
+            )
+          ) : null}
+        </View>
+
+        <View className="mt-3.5 flex-row items-center gap-3">
+          <PisteAvancement intervention={i} />
+          {bloquee ? (
+            <View className="flex-row items-center gap-1.5 rounded-full border border-warn/40 bg-warn-soft px-2.5 py-1 dark:border-warn-dark/40 dark:bg-warn-softdark">
+              <Icone nom="pause" taille={11} couleur={t.warn} poids="bold" />
+              <Text maxFontSizeMultiplier={1.4} className="text-[13px] font-semibold text-warn dark:text-warn-dark">
+                {BLOCAGES[bloquee].label}
+              </Text>
             </View>
-            {vehicule ? (
-              <View className="mt-0.5 flex-row items-center gap-2">
-                <Secondaire className="shrink" numberOfLines={1}>
-                  {nomVehicule}
-                </Secondaire>
-                <Mono ton="muted">{vehicule.plaque}</Mono>
-              </View>
-            ) : null}
-            <Texte className="mt-1" numberOfLines={compacte ? 1 : 2}>
-              {i.prestation}
-            </Texte>
-          </View>
-          {mecanicien ? (
-            <Avatar membre={mecanicien} taille={compacte ? 26 : 32} />
           ) : (
-            <Legende className="text-right" accessibilityLabel="Non attribué">
-              Non attribué
-            </Legende>
+            <Text maxFontSizeMultiplier={1.4} className="min-w-[64px] text-right text-[13px] font-semibold" style={{ color: e.couleur }}>
+              {e.mot}
+            </Text>
           )}
         </View>
-        <View className={`${compacte ? 'mt-2' : 'mt-3'} flex-row flex-wrap items-center gap-1.5`}>
-          <PastilleStatut statut={i.statut} court />
-          {bloquee ? <PastilleBlocage blocage={i.blocage!} /> : null}
-          {!compacte ? <PastilleOrigine origine={i.origine} /> : null}
-        </View>
-        {!compacte && i.memo ? (
-          <Legende className="mt-2" numberOfLines={1}>
-            {i.memo}
-          </Legende>
-        ) : null}
-        {pied ? <View className="mt-3 flex-row">{pied}</View> : null}
+
+        {pied ? <View className="mt-3.5 flex-row">{pied}</View> : null}
       </Carte>
     </Pressable>
   );

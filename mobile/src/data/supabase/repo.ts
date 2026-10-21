@@ -17,7 +17,10 @@
  *     employé sans voirTout ne satisfait pas toujours (fiche non attribuée) ;
  *   - les fonctions Edge (sms, inviter) sont la source de vérité de ce qu’elles
  *     font ; leurs refus remontent à l’écran, leur absence a un repli local ;
- *   - les photos vont dans le bucket privé « photos », lues par URL signées.
+ *   - les photos vont dans le bucket privé « photos », lues par URL signées ;
+ *   - présence pour la console Rencar : `signaler_presence` à l’ouverture de
+ *     session et au retour au premier plan (au plus toutes les 10 minutes),
+ *     sans jamais bloquer ni faire échouer l’app.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,7 +32,8 @@ import {
   type RealtimeChannel,
   type SupabaseClient,
 } from '@supabase/supabase-js';
-import { AppState, Platform } from 'react-native';
+import Constants from 'expo-constants';
+import { AppState, type AppStateStatus, Platform } from 'react-native';
 
 import type { Identifiants, NouveauMembre, NouvelleIntervention, Repo, Snapshot } from '@/data/repo';
 import { peut, POSTES, TOUTES_PERMISSIONS } from '@/domain/permissions';
@@ -187,6 +191,41 @@ const TYPES_MIME: Record<string, string> = {
 const plateforme = (): 'ios' | 'android' | 'web' =>
   Platform.OS === 'android' ? 'android' : Platform.OS === 'web' ? 'web' : 'ios';
 
+// ───────────────────────────────────────────── Présence (console Rencar)
+
+/** Un signal au plus toutes les 10 minutes par membre. */
+const INTERVALLE_PRESENCE_MS = 10 * 60 * 1000;
+
+/** Version de l’app (celle de la mise à jour à distance si elle en porte une). */
+function versionApp(): string {
+  return Constants.expoConfig?.version ?? '';
+}
+
+/** « iPhone 17 Pro » et « iOS 26.0 » ; vide si le module natif manque. */
+function appareil(): { modele: string; systeme: string } {
+  try {
+    const Device = require('expo-device') as typeof import('expo-device');
+    return {
+      modele: Device.modelName ?? '',
+      systeme: [Device.osName, Device.osVersion].filter(Boolean).join(' '),
+    };
+  } catch {
+    return { modele: '', systeme: '' };
+  }
+}
+
+/** Notifications autorisées sur ce téléphone (sans rien demander à la personne). */
+async function pushAutorise(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  try {
+    const N = require('expo-notifications') as typeof import('expo-notifications');
+    const p = await N.getPermissionsAsync();
+    return p.granted || p.ios?.status === N.IosAuthorizationStatus.PROVISIONAL;
+  } catch {
+    return false;
+  }
+}
+
 // ────────────────────────────────────────────────────────────────── Repo
 
 export class SupabaseRepo implements Repo {
@@ -203,6 +242,12 @@ export class SupabaseRepo implements Repo {
   private chaine: Promise<unknown> = Promise.resolve();
   private prochain: Promise<Snapshot> | null = null;
 
+  /** Présence : dernier membre signalé, heure du signal, temps de premier plan pas encore signalé. */
+  private membreSignale: string | null = null;
+  private dernierSignal = 0;
+  private premierPlanDepuis: number | null = AppState.currentState === 'active' ? Date.now() : null;
+  private premierPlanNonSignaleMs = 0;
+
   constructor(private readonly client: SupabaseClient = creerClientSupabase()) {
     if (Platform.OS !== 'web') {
       // Recommandation Supabase pour Expo : rafraîchir le jeton seulement au premier plan.
@@ -211,6 +256,7 @@ export class SupabaseRepo implements Repo {
         else void this.client.auth.stopAutoRefresh();
       });
     }
+    AppState.addEventListener('change', (etat) => this.suivrePremierPlan(etat));
   }
 
   private get gid(): string {
@@ -292,6 +338,7 @@ export class SupabaseRepo implements Repo {
     this.membre = null;
     this.garageId = null;
     this.dernier = null;
+    this.oublierPresence();
   }
 
   async demanderReinitialisation(email: string): Promise<void> {
@@ -319,6 +366,64 @@ export class SupabaseRepo implements Repo {
     this.membre = null;
     this.garageId = null;
     this.dernier = null;
+    this.oublierPresence();
+  }
+
+  // ── Présence (console Rencar)
+
+  /** Cumule le temps passé au premier plan ; au retour, signale la présence (au plus toutes les 10 minutes). */
+  private suivrePremierPlan(etat: AppStateStatus) {
+    const maintenant = Date.now();
+    if (etat === 'active') {
+      if (this.premierPlanDepuis === null) this.premierPlanDepuis = maintenant;
+      void this.signalerPresence();
+    } else if (this.premierPlanDepuis !== null) {
+      this.premierPlanNonSignaleMs += maintenant - this.premierPlanDepuis;
+      this.premierPlanDepuis = null;
+    }
+  }
+
+  /**
+   * `rpc('signaler_presence')` : +1 session sur la ligne du jour, minutes de
+   * premier plan depuis le dernier signal, version, modèle, système et
+   * permission push. Au plus une fois toutes les 10 minutes par membre. Ne
+   * lève jamais : sans réseau, sans la migration 0005 ou pour un compte
+   * désactivé, l’app continue comme si de rien n’était.
+   */
+  private async signalerPresence(): Promise<void> {
+    try {
+      const membre = this.membre;
+      if (!membre) return;
+      const maintenant = Date.now();
+      if (this.membreSignale === membre.id && maintenant - this.dernierSignal < INTERVALLE_PRESENCE_MS) return;
+      this.membreSignale = membre.id;
+      this.dernierSignal = maintenant;
+
+      const minutes = Math.min(1440, Math.floor(this.premierPlanNonSignaleMs / 60_000));
+      const { modele, systeme } = appareil();
+      const { error } = await this.client.rpc('signaler_presence', {
+        p_version_app: versionApp(),
+        p_modele: modele,
+        p_systeme: systeme,
+        p_push: await pushAutorise(),
+        p_minutes: minutes,
+      });
+      if (error) {
+        if (__DEV__) console.warn('Présence non signalée :', error.message);
+        return;
+      }
+      this.premierPlanNonSignaleMs = Math.max(0, this.premierPlanNonSignaleMs - minutes * 60_000);
+    } catch (e) {
+      if (__DEV__) console.warn('Présence non signalée :', e instanceof Error ? e.message : e);
+    }
+  }
+
+  /** Changement de compte : le temps de premier plan déjà compté n’appartient pas au suivant. */
+  private oublierPresence() {
+    this.membreSignale = null;
+    this.dernierSignal = 0;
+    this.premierPlanNonSignaleMs = 0;
+    this.premierPlanDepuis = AppState.currentState === 'active' ? Date.now() : null;
   }
 
   /** Lit membres puis garages ; null si le membre n’existe pas ou n’est plus actif (masqué par la RLS). */
@@ -337,6 +442,7 @@ export class SupabaseRepo implements Repo {
     }
     this.membre = membre;
     this.garageId = g.id;
+    void this.signalerPresence();
     return { membre, garage: versGarage(g) };
   }
 

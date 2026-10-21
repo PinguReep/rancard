@@ -56,24 +56,26 @@ export const palette: Record<'light' | 'dark', Palette> = {
     warnSoft: '#fff4de',
     blanc: '#ffffff',
   },
+  // Sombre « cockpit » : noir bleuté, surfaces à peine levées, couleurs
+  // vives réservées au sens (étape en cours, blocage, prêt).
   dark: {
-    bg: '#0b0b0e',
-    surface: '#151519',
-    surface2: '#1e1e24',
-    line: '#2a2a31',
-    ink: '#f5f5f7',
-    muted: '#9a9aa5',
-    mutedSoft: '#26262d',
-    faint: '#6b6b76',
-    accent: '#5b8cff',
+    bg: '#06080c',
+    surface: '#0f131a',
+    surface2: '#171c25',
+    line: '#232a35',
+    ink: '#eef1f6',
+    muted: '#8b94a5',
+    mutedSoft: '#1a1f29',
+    faint: '#5b6474',
+    accent: '#6a9bff',
     accentFond: '#3568f5',
-    accentSoft: '#18244a',
-    danger: '#ff5d67',
-    dangerSoft: '#3d1418',
-    ok: '#3ccf74',
-    okSoft: '#12331f',
-    warn: '#ffb020',
-    warnSoft: '#3a2a08',
+    accentSoft: '#14203a',
+    danger: '#ff5b61',
+    dangerSoft: '#34151a',
+    ok: '#2fd6a1',
+    okSoft: '#0e2a22',
+    warn: '#ffb224',
+    warnSoft: '#2d2310',
     blanc: '#ffffff',
   },
 };
@@ -84,7 +86,15 @@ export function useTheme(): Palette & { scheme: 'light' | 'dark' } {
   return { ...palette[scheme], scheme };
 }
 
-export const radius = { sm: 8, md: 12, lg: 14, xl: 20, xxl: 28 } as const;
+export const radius = { sm: 8, md: 12, lg: 14, xl: 22, xxl: 28 } as const;
+
+/** Halo lumineux (iOS) : ombre colorée, sans décalage, autour des éléments « vivants ». */
+export const halo = (couleur: string, rayon = 14, opacite = 0.55) => ({
+  shadowColor: couleur,
+  shadowOpacity: opacite,
+  shadowRadius: rayon,
+  shadowOffset: { width: 0, height: 0 },
+});
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 
