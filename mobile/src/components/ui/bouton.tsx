@@ -2,10 +2,11 @@
  * Boutons. Quatre variantes, une hauteur minimale (48 px, 36 px en compact
  * avec zone tactile élargie à 44) : l'action principale est toujours pleine,
  * les autres sont calmes. Les hauteurs sont des minimums pour suivre la
- * taille de texte du système.
+ * taille de texte du système. Un onPress asynchrone bloque le bouton et
+ * affiche l'attente jusqu'à sa fin : un double appui n'envoie rien deux fois.
  */
 
-import type { ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { halo, useTheme } from '@/theme/tokens';
@@ -53,23 +54,36 @@ export function Bouton({
   accessibilityLabel,
 }: Props) {
   const t = useTheme();
-  const inactif = desactive || chargement;
+  const [occupe, setOccupe] = useState(false);
+  const verrou = useRef(false);
+  const attente = chargement || occupe;
+  const inactif = desactive || attente;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled: inactif, busy: chargement }}
+      accessibilityState={{ disabled: inactif, busy: attente }}
       disabled={inactif}
       hitSlop={compact ? 4 : undefined}
       onPress={() => {
+        if (verrou.current) return;
         impulsion(variante === 'principal' ? 'moyen' : 'leger');
-        void onPress?.();
+        const resultat = onPress?.();
+        if (resultat && typeof resultat.then === 'function') {
+          verrou.current = true;
+          setOccupe(true);
+          const fin = () => {
+            verrou.current = false;
+            setOccupe(false);
+          };
+          void resultat.then(fin, fin);
+        }
       }}
       style={variante === 'principal' && !inactif && t.scheme === 'dark' ? halo(t.accentFond, compact ? 10 : 18, 0.6) : undefined}
       className={`flex-row items-center justify-center gap-2 ${compact ? 'min-h-[36px] rounded-xl px-3 py-1.5' : 'min-h-[52px] rounded-2xl px-5 py-2.5'} ${fond[variante]} ${
         inactif ? 'opacity-50' : 'active:opacity-75'
       } ${className}`}>
-      {chargement ? (
+      {attente ? (
         <ActivityIndicator color={variante === 'principal' ? t.blanc : t.ink} />
       ) : (
         <>

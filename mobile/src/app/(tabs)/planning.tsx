@@ -26,6 +26,7 @@ import { Bouton, BoutonRond, Ecran, Etiquette, Icone, Legende, Vide, impulsion, 
 import { Segments } from '@/components/ui/segments';
 import { repo } from '@/data';
 import type { Intervention } from '@/domain/types';
+import { useControleRafraichir } from '@/hooks/use-rafraichir';
 import { ecrire } from '@/lib/ecrire';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
 import { halo, useTheme, type Palette } from '@/theme/tokens';
@@ -46,6 +47,7 @@ const COULEUR_SECTION: Record<CleSection, keyof Palette> = {
 
 export default function Planning() {
   const router = useRouter();
+  const rafraichir = useControleRafraichir();
   const t = useTheme();
   const membre = useMembre();
   const p = usePermissions();
@@ -202,6 +204,7 @@ export default function Planning() {
         getItemType={(l) => l.type}
         ListHeaderComponent={entete}
         ListEmptyComponent={vide}
+        refreshControl={rafraichir}
         contentContainerStyle={{ paddingBottom: margeBasse }}
         extraData={d}
         showsVerticalScrollIndicator={false}

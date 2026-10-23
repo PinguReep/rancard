@@ -8,13 +8,15 @@
 
 import { Platform } from 'react-native';
 
+import { numeroLien } from './format';
+
 export const URL_SUIVI_BASE = (process.env.EXPO_PUBLIC_SUIVI_URL ?? 'https://suivi.rencar.example/suivi').replace(/\/+$/, '');
 
 export const lienSuivi = (token: string) => `${URL_SUIVI_BASE}?t=${encodeURIComponent(token)}`;
 
 /** Lien `sms:` avec corps prérempli (iOS sépare par « & », Android et web par « ? »). */
 export function smsHref(tel: string, corps?: string): string {
-  const numero = tel.replace(/\s/g, '');
+  const numero = numeroLien(tel);
   if (!corps) return `sms:${numero}`;
   const separateur = Platform.OS === 'ios' ? '&' : '?';
   return `sms:${numero}${separateur}body=${encodeURIComponent(corps)}`;

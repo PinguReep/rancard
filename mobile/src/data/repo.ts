@@ -69,16 +69,37 @@ export type Snapshot = {
   notifications: Notification[];
 };
 
+/**
+ * Qui consulte quelle fiche en ce moment : « client:<id> » ou
+ * « intervention:<id> » → identifiants des membres. Présence en direct,
+ * jamais stockée.
+ */
+export type Consultations = Record<string, string[]>;
+
 export interface Repo {
   // ── Session
   sessionCourante(): Promise<Session | null>;
   connecter(id: Identifiants): Promise<Session>;
-  /** Connexion au garage de démonstration, disponible dans les deux modes */
+  /**
+   * Connexion au garage de démonstration. Toujours locale : un build supabase
+   * bascule d'abord vers DemoRepo (data/index.ts) et SupabaseRepo la refuse.
+   */
   connecterDemo(): Promise<Session>;
   deconnecter(): Promise<void>;
+  /** Envoie par e-mail un code à 6 chiffres pour choisir un nouveau mot de passe. */
   demanderReinitialisation(email: string): Promise<void>;
+  /** Code reçu (mot de passe oublié), puis nouveau mot de passe : ouvre la session. */
+  reinitialiserMotDePasse(email: string, code: string, motDePasse: string): Promise<Session>;
+  /** Code de l'e-mail d'invitation, puis choix du mot de passe : ouvre la session. */
+  activerCompte(email: string, code: string, motDePasse: string): Promise<Session>;
   changerMotDePasse(actuel: string, nouveau: string): Promise<void>;
   supprimerMonCompte(): Promise<void>;
+
+  // ── Présence sur les fiches (« Simon consulte cette fiche »)
+  /** Fiche affichée par ce membre ; null quand il la quitte. */
+  signalerConsultation(fiche: string | null): void;
+  /** Collègues présents, fiche par fiche, en direct. Retourne la fonction de désabonnement. */
+  abonnerConsultations(cb: (c: Consultations) => void): () => void;
 
   // ── Lecture globale (le garage entier tient en mémoire : quelques Mo au plus)
   charger(): Promise<Snapshot>;

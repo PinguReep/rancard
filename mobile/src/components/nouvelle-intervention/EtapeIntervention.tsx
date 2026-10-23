@@ -44,9 +44,11 @@ type Props = {
   garage: Garage;
   membres: Membre[];
   voirPrix: boolean;
+  /** « Plus tard » (sans mécanicien) : seulement pour qui voit tout le planning */
+  plusTard?: boolean;
 };
 
-export function EtapeIntervention({ valeurs, onChange, erreurs, garage, membres, voirPrix }: Props) {
+export function EtapeIntervention({ valeurs, onChange, erreurs, garage, membres, voirPrix, plusTard = true }: Props) {
   const t = useTheme();
   const maj = (patch: Partial<ValeursIntervention>) => onChange((v) => ({ ...v, ...patch }));
   const champPrestation = useRef<TextInput>(null);
@@ -165,7 +167,7 @@ export function EtapeIntervention({ valeurs, onChange, erreurs, garage, membres,
       </Etiquette>
       <View className="mb-6">
         <Puces>
-          <Puce label="Plus tard" active={valeurs.membreId === null} onPress={() => maj({ membreId: null })} />
+          {plusTard ? <Puce label="Plus tard" active={valeurs.membreId === null} onPress={() => maj({ membreId: null })} /> : null}
           {membres.map((m) => (
             <Puce
               key={m.id}

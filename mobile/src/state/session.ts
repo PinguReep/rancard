@@ -8,7 +8,7 @@
 
 import { create } from 'zustand';
 
-import { repo } from '@/data';
+import { BACKEND_BUILD, choisirBackend, demoLocale, repo, restaurerBackend } from '@/data';
 import type { Snapshot } from '@/data/repo';
 import { permissionsDe } from '@/domain/permissions';
 import type { Membre, Permissions, Session } from '@/domain/types';
@@ -20,8 +20,14 @@ type EtatSession = {
   erreur: string | null;
   demarrer(): Promise<void>;
   connecter(email: string, motDePasse: string): Promise<void>;
+  /** Invitation : code de l'e-mail, puis mot de passe choisi. */
+  activer(email: string, code: string, motDePasse: string): Promise<void>;
+  /** Mot de passe oublié : code de l'e-mail, puis nouveau mot de passe. */
+  reinitialiser(email: string, code: string, motDePasse: string): Promise<void>;
   connecterDemo(): Promise<void>;
   deconnecter(): Promise<void>;
+  /** Recharge tout le garage (« tirer pour actualiser »). */
+  rafraichir(): Promise<void>;
 };
 
 let desabonner: (() => void) | null = null;
@@ -41,9 +47,14 @@ export const useSession = create<EtatSession>((set) => ({
 
   async demarrer() {
     try {
+      await restaurerBackend();
       const s = await repo().sessionCourante();
       if (s) await ouvrir(s, set);
-      else set({ session: null });
+      else {
+        // Démonstration locale refermée entre-temps : retour à la connexion réelle.
+        if (demoLocale()) await choisirBackend(BACKEND_BUILD);
+        set({ session: null });
+      }
     } catch (e) {
       set({ session: null, erreur: (e as Error).message });
     }
@@ -54,15 +65,39 @@ export const useSession = create<EtatSession>((set) => ({
     await ouvrir(s, set);
   },
 
-  async connecterDemo() {
-    const s = await repo().connecterDemo();
+  async rafraichir() {
+    const donnees = await repo().charger();
+    set({ donnees });
+  },
+
+  async activer(email, code, motDePasse) {
+    const s = await repo().activerCompte(email, code, motDePasse);
     await ouvrir(s, set);
+  },
+
+  async reinitialiser(email, code, motDePasse) {
+    const s = await repo().reinitialiserMotDePasse(email, code, motDePasse);
+    await ouvrir(s, set);
+  },
+
+  async connecterDemo() {
+    // Dans un build supabase, la démonstration est locale : jamais de connexion au projet.
+    await choisirBackend('demo');
+    try {
+      const s = await repo().connecterDemo();
+      await ouvrir(s, set);
+    } catch (e) {
+      if (demoLocale()) await choisirBackend(BACKEND_BUILD);
+      throw e;
+    }
   },
 
   async deconnecter() {
     await repo().deconnecter();
     desabonner?.();
     desabonner = null;
+    // Quitter la démonstration locale ramène au backend du build (écran de connexion réelle).
+    if (demoLocale()) await choisirBackend(BACKEND_BUILD);
     set({ session: null, donnees: null });
   },
 }));

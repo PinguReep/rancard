@@ -1,6 +1,12 @@
 /**
  * Le garage (gérant) : identité, horaires, SMS, réceptionniste. Chaque
  * champ s'enregistre au blur, chaque interrupteur tout de suite.
+ *
+ * Sur un vrai garage (backend supabase), les options SMS et réceptionniste
+ * et l'expéditeur des SMS sont réglés par l'équipe Rencar (la base refuse
+ * leur modification par le gérant, trigger garages_garde) : ils sont
+ * affichés en lecture seule. L'envoi automatique et le texte du SMS restent
+ * au gérant. La démonstration locale garde tout modifiable.
  */
 
 import { Stack } from 'expo-router';
@@ -14,7 +20,7 @@ import { LigneHoraire, ORDRE_JOURS, type Plage } from '@/components/profil/Ligne
 import { LigneInterrupteur } from '@/components/profil/LigneInterrupteur';
 import { useMembreCourant } from '@/components/profil/useMembreCourant';
 import { Carte, Champ, Ecran, Etiquette, Groupe, Legende, Section, Texte, Vide, impulsion } from '@/components/ui';
-import { repo } from '@/data';
+import { BACKEND, repo } from '@/data';
 import { estGerant } from '@/domain/permissions';
 import type { Garage } from '@/domain/types';
 import { ecrire } from '@/lib/ecrire';
@@ -22,6 +28,7 @@ import { formaterTelephone, gabaritSms } from '@/lib/format';
 import { useDonnees } from '@/state/session';
 
 const EXPEDITEUR = /^[A-Z0-9]{3,11}$/;
+const PAR_RENCAR = 'Réglé par l’équipe Rencar : écrivez-nous pour le changer.';
 
 export default function ReglagesGarage() {
   const insets = useSafeAreaInsets();
@@ -113,6 +120,8 @@ export default function ReglagesGarage() {
 
   const apercu = gabaritSms(texteSms, { prenom: 'Élodie', garage: garage.nom });
   const sms = garage.options.sms;
+  // Lu au rendu : ne change qu'entre deux sessions (voir data/index.ts).
+  const parRencar = BACKEND === 'supabase';
 
   return (
     <Ecran sansHaut>
@@ -121,6 +130,7 @@ export default function ReglagesGarage() {
         contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}
         bottomOffset={24}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         contentInsetAdjustmentBehavior="automatic">
         <Section titre="Identité">
           <Champ libelle="Nom du garage" value={nom} onChangeText={setNom} onBlur={validerNom} autoCapitalize="words" returnKeyType="done" />
@@ -135,7 +145,14 @@ export default function ReglagesGarage() {
         </Groupe>
 
         <Groupe titre="SMS" note={sms ? undefined : 'Sans SMS, l’équipe prévient le client par téléphone depuis la fiche.'}>
-          <LigneInterrupteur titre="SMS aux clients" aide="Véhicule prêt, rappels de rendez-vous." valeur={sms} onChange={(v) => options({ sms: v })} derniere={!sms} />
+          <LigneInterrupteur
+            titre="SMS aux clients"
+            aide={parRencar ? PAR_RENCAR : 'Véhicule prêt, rappels de rendez-vous.'}
+            valeur={sms}
+            onChange={(v) => options({ sms: v })}
+            desactive={parRencar}
+            derniere={!sms}
+          />
           {sms ? (
             <LigneInterrupteur
               titre="Envoi automatique"
@@ -157,9 +174,14 @@ export default function ReglagesGarage() {
                 setExpediteur(v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11));
                 setErreurExpediteur(null);
               }}
-              onBlur={validerExpediteur}
+              onBlur={parRencar ? undefined : validerExpediteur}
+              editable={!parRencar}
               erreur={erreurExpediteur}
-              aide="Nom affiché sur le téléphone du client. 11 caractères maximum, lettres et chiffres, sans espace (ex. GARAGEFICTI)."
+              aide={
+                parRencar
+                  ? `Nom affiché sur le téléphone du client. ${PAR_RENCAR}`
+                  : 'Nom affiché sur le téléphone du client. 11 caractères maximum, lettres et chiffres, sans espace (ex. GARAGEFICTI).'
+              }
               maxLength={11}
               returnKeyType="done"
             />
@@ -187,9 +209,10 @@ export default function ReglagesGarage() {
         <Groupe titre="Réceptionniste téléphonique" note="Active l’onglet Appels. Le service lui-même est branché par Rencar.">
           <LigneInterrupteur
             titre="Réceptionniste"
-            aide="Répond aux appels et crée des fiches à valider."
+            aide={parRencar ? PAR_RENCAR : 'Répond aux appels et crée des fiches à valider.'}
             valeur={garage.options.receptionniste}
             onChange={(v) => options({ receptionniste: v })}
+            desactive={parRencar}
             derniere
           />
         </Groupe>

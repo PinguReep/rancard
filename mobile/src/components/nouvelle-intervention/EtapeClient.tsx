@@ -37,7 +37,7 @@ type Props = {
 };
 
 /** « Manon Lefèvre » → prénom « Manon », nom « Lefèvre » pour préremplir. */
-function devinerNom(requete: string): Partial<ValeursClient> {
+export function devinerNom(requete: string): Partial<ValeursClient> {
   const mots = requete.trim().split(/\s+/).filter(Boolean);
   if (!mots.length || /\d/.test(requete)) return {};
   const cap = (m: string) => m.charAt(0).toUpperCase() + m.slice(1);

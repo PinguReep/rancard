@@ -68,7 +68,22 @@ export function formaterTelephone(saisie: string): string {
   return chiffres.replace(/(\d{2})(?=\d)/g, '$1 ');
 }
 
-export const telHref = (tel: string) => `tel:${tel.replace(/\s/g, '')}`;
+/** Numéro réduit à [0-9+] : rien d'autre ne passe dans un lien `tel:` ou `sms:` (pas de « ;ext= », « ?body= »). */
+export const numeroLien = (tel: string) => tel.replace(/[^0-9+]/g, '');
+
+export const telHref = (tel: string) => `tel:${numeroLien(tel)}`;
+
+/**
+ * Lien `mailto:` dont l'adresse est encodée partie par partie : un « ? »,
+ * « & » ou « = » saisi dans la fiche ne peut pas ajouter de destinataire
+ * (cc, bcc) ni de corps au message.
+ */
+export function mailtoHref(email: string): string {
+  const propre = email.trim();
+  const arobase = propre.lastIndexOf('@');
+  if (arobase <= 0) return `mailto:${encodeURIComponent(propre)}`;
+  return `mailto:${encodeURIComponent(propre.slice(0, arobase))}@${encodeURIComponent(propre.slice(arobase + 1))}`;
+}
 
 export const kilometrage = (km?: number) => (km == null ? '' : `${km.toLocaleString('fr-FR')} km`);
 

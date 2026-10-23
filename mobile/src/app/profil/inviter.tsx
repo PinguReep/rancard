@@ -4,8 +4,8 @@
  */
 
 import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { View } from 'react-native';
+import { useRef, useState } from 'react';
+import { TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -37,6 +37,8 @@ export default function Inviter() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(false);
   const [envoye, setEnvoye] = useState<Membre | null>(null);
+  const champNom = useRef<TextInput>(null);
+  const champEmail = useRef<TextInput>(null);
 
   if (!estGerant(moi)) {
     return (
@@ -107,6 +109,7 @@ export default function Inviter() {
         contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}
         bottomOffset={24}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         contentInsetAdjustmentBehavior="automatic">
         <Section titre="Identité">
           <Champ
@@ -118,9 +121,33 @@ export default function Inviter() {
             textContentType="givenName"
             autoCapitalize="words"
             returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => champNom.current?.focus()}
           />
-          <Champ libelle="Nom" value={nom} onChangeText={setNom} erreur={erreurs.nom} autoComplete="family-name" textContentType="familyName" autoCapitalize="words" returnKeyType="next" />
-          <Champ libelle="E-mail" type="email" value={email} onChangeText={setEmail} erreur={erreurs.email} placeholder="prenom@garage.example" returnKeyType="done" className="mb-0" />
+          <Champ
+            ref={champNom}
+            libelle="Nom"
+            value={nom}
+            onChangeText={setNom}
+            erreur={erreurs.nom}
+            autoComplete="family-name"
+            textContentType="familyName"
+            autoCapitalize="words"
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => champEmail.current?.focus()}
+          />
+          <Champ
+            ref={champEmail}
+            libelle="E-mail"
+            type="email"
+            value={email}
+            onChangeText={setEmail}
+            erreur={erreurs.email}
+            placeholder="prenom@garage.example"
+            returnKeyType="done"
+            className="mb-0"
+          />
         </Section>
 
         <GroupeRole valeur={role} onChange={setRole} />

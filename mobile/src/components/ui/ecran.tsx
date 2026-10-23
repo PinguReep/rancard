@@ -4,7 +4,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { Platform, RefreshControl, ScrollView, View, type ViewProps } from 'react-native';
+import { Keyboard, Platform, RefreshControl, ScrollView, TouchableWithoutFeedback, View, type ViewProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
@@ -62,6 +62,7 @@ export function Ecran({ children, defilant, sansHaut, onRafraichir, rafraichisse
             alignSelf: 'center',
           }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
           contentInsetAdjustmentBehavior="automatic"
           refreshControl={
             onRafraichir ? (
@@ -77,9 +78,12 @@ export function Ecran({ children, defilant, sansHaut, onRafraichir, rafraichisse
   return (
     <View {...p} className={`flex-1 bg-bg dark:bg-bg-dark ${className}`} style={{ paddingTop }}>
       <Halo />
-      <View className="flex-1 w-full self-center" style={{ maxWidth: LARGEUR_MAX }}>
-        {children}
-      </View>
+      {/* Toucher hors d'un champ ferme le clavier (les boutons et les listes gardent leurs gestes). */}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View className="flex-1 w-full self-center" style={{ maxWidth: LARGEUR_MAX }}>
+          {children}
+        </View>
+      </TouchableWithoutFeedback>
     </View>
   );
 }

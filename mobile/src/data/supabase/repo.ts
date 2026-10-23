@@ -16,7 +16,8 @@
  *     RETURNING : PostgreSQL soumet un RETURNING à la policy de lecture, qu’un
  *     employé sans voirTout ne satisfait pas toujours (fiche non attribuée) ;
  *   - les fonctions Edge (sms, inviter) sont la source de vérité de ce qu’elles
- *     font ; leurs refus remontent à l’écran, leur absence a un repli local ;
+ *     font ; leurs refus remontent à l’écran ; absente, « inviter » laisse
+ *     l’invitation en attente, « sms » signale que rien n’est parti ;
  *   - les photos vont dans le bucket privé « photos », lues par URL signées ;
  *   - présence pour la console Rencar : `signaler_presence` à l’ouverture de
  *     session et au retour au premier plan (au plus toutes les 10 minutes),
@@ -35,7 +36,7 @@ import {
 import Constants from 'expo-constants';
 import { AppState, type AppStateStatus, Platform } from 'react-native';
 
-import type { Identifiants, NouveauMembre, NouvelleIntervention, Repo, Snapshot } from '@/data/repo';
+import type { Consultations, Identifiants, NouveauMembre, NouvelleIntervention, Repo, Snapshot } from '@/data/repo';
 import { peut, POSTES, TOUTES_PERMISSIONS } from '@/domain/permissions';
 import type { Blocage, Client, Commentaire, Intervention, Membre, Session, Statut, Vehicule } from '@/domain/types';
 
@@ -91,15 +92,12 @@ const TABLES_TEMPS_REEL = [
   'appels',
   'notifications',
   'notifications_lues',
+  // Les suppressions ne sont pas diffusées (fuite entre garages) : chacune
+  // laisse une ligne ici, lisible par le seul garage (0007_temps_reel).
+  'suppressions',
 ] as const;
 
 const COULEURS = ['#2f6bff', '#d92632', '#1f9d55', '#d98b00', '#7c3aed', '#0891b2'];
-
-/** Compte du garage de démonstration (seed.sql). */
-const DEMO: Identifiants = {
-  email: process.env.EXPO_PUBLIC_DEMO_EMAIL ?? 'simon@garage.example',
-  motDePasse: process.env.EXPO_PUBLIC_DEMO_MOT_DE_PASSE ?? 'demo1234',
-};
 
 // ─────────────────────────────────────────────────────────────── Client
 
@@ -247,6 +245,15 @@ export class SupabaseRepo implements Repo {
   private dernierSignal = 0;
   private premierPlanDepuis: number | null = AppState.currentState === 'active' ? Date.now() : null;
   private premierPlanNonSignaleMs = 0;
+  /** Heure du passage en arrière-plan (rechargement au retour s'il a duré). */
+  private quitteLe: number | null = null;
+
+  /** Présence sur les fiches : canal privé `consultations:<garage>` (0007_temps_reel). */
+  private presence: RealtimeChannel | null = null;
+  private presenceOuverte = false;
+  private ficheConsultee: string | null = null;
+  private consultations: Consultations = {};
+  private abonnesConsultations = new Set<(c: Consultations) => void>();
 
   constructor(private readonly client: SupabaseClient = creerClientSupabase()) {
     if (Platform.OS !== 'web') {
@@ -329,11 +336,14 @@ export class SupabaseRepo implements Repo {
   }
 
   async connecterDemo(): Promise<Session> {
-    return this.connecter(DEMO);
+    // Jamais de compte de démonstration sur un projet joignable : la démo d’un
+    // build supabase est locale (bascule vers DemoRepo dans data/index.ts).
+    throw new Error('Le garage de démonstration s’ouvre sur ce téléphone, sans connexion au serveur.');
   }
 
   async deconnecter(): Promise<void> {
     this.fermerCanal();
+    this.fermerPresence();
     await this.client.auth.signOut();
     this.membre = null;
     this.garageId = null;
@@ -346,6 +356,37 @@ export class SupabaseRepo implements Repo {
       redirectTo: LIEN_REINITIALISATION,
     });
     if (error) throw erreur(error);
+  }
+
+  async reinitialiserMotDePasse(email: string, code: string, motDePasse: string): Promise<Session> {
+    return this.validerCode(email, code, 'recovery', motDePasse);
+  }
+
+  async activerCompte(email: string, code: string, motDePasse: string): Promise<Session> {
+    return this.validerCode(email, code, 'invite', motDePasse);
+  }
+
+  /**
+   * Code à 6 chiffres de l'e-mail (gabarits supabase/templates, `{{ .Token }}`),
+   * plutôt qu'un lien : rien à ouvrir depuis la messagerie, aucun lien
+   * consommé par un antivirus. Le code ouvre une session, puis le mot de
+   * passe choisi la remplace.
+   */
+  private async validerCode(email: string, code: string, type: 'invite' | 'recovery', motDePasse: string): Promise<Session> {
+    const { data, error } = await this.client.auth.verifyOtp({
+      email: email.trim().toLowerCase(),
+      token: code.replace(/\D/g, ''),
+      type,
+    });
+    if (error || !data.user) throw new Error('Code invalide ou expiré. Demandez un nouvel e-mail.');
+    const maj = await this.client.auth.updateUser({ password: motDePasse });
+    if (maj.error) throw erreur(maj.error);
+    const session = await this.ouvrirSession(data.user.id);
+    if (!session) {
+      await this.client.auth.signOut({ scope: 'local' });
+      throw new Error('Ce compte n’est rattaché à aucun garage actif.');
+    }
+    return session;
   }
 
   async changerMotDePasse(actuel: string, nouveau: string): Promise<void> {
@@ -361,6 +402,7 @@ export class SupabaseRepo implements Repo {
   async supprimerMonCompte(): Promise<void> {
     sansErreur(await this.client.rpc('supprimer_mon_compte'));
     this.fermerCanal();
+    this.fermerPresence();
     // L’utilisateur n’existe plus côté serveur : on efface seulement la session locale.
     await this.client.auth.signOut({ scope: 'local' });
     this.membre = null;
@@ -374,10 +416,17 @@ export class SupabaseRepo implements Repo {
   /** Cumule le temps passé au premier plan ; au retour, signale la présence (au plus toutes les 10 minutes). */
   private suivrePremierPlan(etat: AppStateStatus) {
     const maintenant = Date.now();
+    // En arrière-plan, l'employé ne consulte plus rien.
+    this.publierConsultation(etat === 'active' ? this.ficheConsultee : null);
     if (etat === 'active') {
+      // Retour au premier plan après au moins 30 s : rattraper ce que le temps
+      // réel a pu manquer (pas pour un simple coup d'œil au centre de contrôle).
+      if (this.canal && this.quitteLe !== null && maintenant - this.quitteLe > 30_000) this.planifierRechargement();
+      this.quitteLe = null;
       if (this.premierPlanDepuis === null) this.premierPlanDepuis = maintenant;
       void this.signalerPresence();
     } else if (this.premierPlanDepuis !== null) {
+      this.quitteLe = maintenant;
       this.premierPlanNonSignaleMs += maintenant - this.premierPlanDepuis;
       this.premierPlanDepuis = null;
     }
@@ -561,7 +610,14 @@ export class SupabaseRepo implements Repo {
         () => this.planifierRechargement(),
       );
     }
-    this.canal = canal.subscribe();
+    // Après une coupure (téléphone verrouillé, réseau), le canal se réabonne :
+    // ce qui a changé entre-temps n'a pas été diffusé, on recharge.
+    let premiere = true;
+    this.canal = canal.subscribe((statut) => {
+      if (statut !== 'SUBSCRIBED') return;
+      if (premiere) premiere = false;
+      else this.planifierRechargement();
+    });
   }
 
   private fermerCanal() {
@@ -573,6 +629,62 @@ export class SupabaseRepo implements Repo {
       void this.client.removeChannel(this.canal);
       this.canal = null;
     }
+  }
+
+  // ──────────────────────────────────────── Présence sur les fiches
+
+  signalerConsultation(fiche: string | null): void {
+    this.ficheConsultee = fiche;
+    this.ouvrirPresence();
+    this.publierConsultation(fiche);
+  }
+
+  abonnerConsultations(cb: (c: Consultations) => void): () => void {
+    this.abonnesConsultations.add(cb);
+    this.ouvrirPresence();
+    cb(this.consultations);
+    return () => {
+      this.abonnesConsultations.delete(cb);
+    };
+  }
+
+  /** Canal privé du garage ; la présence n'est publiée qu'une fois l'abonnement établi. */
+  private ouvrirPresence() {
+    if (this.presence || !this.garageId || !this.membre) return;
+    const canal = this.client.channel(`consultations:${this.garageId}`, {
+      config: { private: true, presence: { key: this.membre.id } },
+    });
+    canal.on('presence', { event: 'sync' }, () => {
+      const c: Consultations = {};
+      for (const [membreId, metas] of Object.entries(canal.presenceState<{ fiche: string | null }>())) {
+        for (const { fiche } of metas) {
+          if (fiche && !(c[fiche] ??= []).includes(membreId)) c[fiche].push(membreId);
+        }
+      }
+      this.consultations = c;
+      for (const cb of this.abonnesConsultations) cb(c);
+    });
+    canal.subscribe((statut) => {
+      this.presenceOuverte = statut === 'SUBSCRIBED';
+      if (this.presenceOuverte) this.publierConsultation(AppState.currentState === 'active' ? this.ficheConsultee : null);
+    });
+    this.presence = canal;
+  }
+
+  private publierConsultation(fiche: string | null) {
+    if (!this.presence || !this.presenceOuverte) return;
+    // Échec sans conséquence : l'indicateur est un confort, la fiche reste utilisable.
+    this.presence.track({ fiche }).catch(() => undefined);
+  }
+
+  private fermerPresence() {
+    if (this.presence) {
+      void this.client.removeChannel(this.presence);
+      this.presence = null;
+    }
+    this.presenceOuverte = false;
+    this.ficheConsultee = null;
+    this.consultations = {};
   }
 
   /** Les changements distants arrivent en rafale : un seul rechargement 300 ms après le dernier. */
@@ -720,21 +832,12 @@ export class SupabaseRepo implements Repo {
 
   async envoyerSmsPret(interventionId: string, _auteurId: string, texte: string): Promise<void> {
     // L’envoi réel et le journal (évènement « sms ») sont faits par la fonction
-    // Edge « sms » ; un refus (SMS désactivés pour le garage, numéro invalide…)
-    // remonte à l’écran. Fonction absente (projet sans fonctions) : l’app
-    // journalise elle-même l’évènement, comme en démo.
+    // Edge « sms », seule à pouvoir écrire ce journal (0006) ; un refus (SMS
+    // désactivés pour le garage, numéro invalide…) remonte à l’écran. Fonction
+    // absente ou injoignable : aucun SMS n’est parti, on le dit plutôt que de
+    // journaliser un envoi qui n’a pas eu lieu.
     const r = await this.fonction('sms', { intervention_id: interventionId, type: 'pret', texte });
-    if (!r.ok) {
-      sansErreur(
-        await this.client.from('evenements').insert({
-          garage_id: this.gid,
-          intervention_id: interventionId,
-          membre_id: this.moi.id,
-          type: 'sms',
-          valeur: texte,
-        }),
-      );
-    }
+    if (!r.ok) throw new Error('Le SMS n’a pas pu être envoyé : service indisponible, réessayez dans un instant.');
     await this.recharger();
   }
 
@@ -954,6 +1057,13 @@ export class SupabaseRepo implements Repo {
   async modifierGarage(patch: Parameters<Repo['modifierGarage']>[0]): Promise<void> {
     const ligne = patchGarageVersLigne(patch);
     if (!Object.keys(ligne).length) return;
+    if (patch.options) {
+      // Seul smsAutomatique est au gérant (garages_garde, 0006). On repart des
+      // options en base, clés réservées comprises, même celles que l'app ne
+      // connaît pas (agent, VoIP…) : les renvoyer incomplètes serait refusé.
+      const { options } = donnees(await this.client.from('garages').select('options').eq('id', this.gid).single<Pick<LigneGarage, 'options'>>());
+      ligne.options = { ...options, smsAutomatique: patch.options.smsAutomatique ?? options.smsAutomatique };
+    }
     sansErreur(await this.client.from('garages').update(ligne).eq('id', this.gid));
     await this.recharger();
   }

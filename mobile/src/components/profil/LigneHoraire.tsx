@@ -4,9 +4,9 @@
  */
 
 import { useState } from 'react';
-import { Switch, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Switch, TextInput, View } from 'react-native';
 
-import { Legende, Ligne, Texte, impulsion } from '@/components/ui';
+import { Erreur, Legende, Ligne, Texte, impulsion } from '@/components/ui';
 import { useTheme } from '@/theme/tokens';
 
 export type Plage = { de: string; a: string };
@@ -28,23 +28,37 @@ export function normaliserHeure(saisie: string): string | null {
   return `${String(h).padStart(2, '0')}:${String(mn).padStart(2, '0')}`;
 }
 
-function ChampHeure({ valeur, libelle, onValider }: { valeur: string; libelle: string; onValider: (v: string) => void }) {
+const MESSAGE_HEURE = 'Heure non reconnue, exemple : 8h30.';
+
+type PropsChamp = {
+  valeur: string;
+  libelle: string;
+  /** Bord rouge : la dernière saisie de ce champ n'était pas une heure */
+  enErreur: boolean;
+  onValider: (v: string) => void;
+  /** Saisie refusée : la valeur précédente est déjà remise */
+  onInvalide: () => void;
+  onSaisie: () => void;
+};
+
+function ChampHeure({ valeur, libelle, enErreur, onValider, onInvalide, onSaisie }: PropsChamp) {
   const t = useTheme();
   const [texte, setTexte] = useState(valeur);
-  const [erreur, setErreur] = useState(false);
   return (
     <TextInput
       accessibilityLabel={libelle}
       value={texte}
       onChangeText={(v) => {
         setTexte(v);
-        setErreur(false);
+        onSaisie();
       }}
       onBlur={() => {
         const n = normaliserHeure(texte);
         if (!n) {
-          setErreur(true);
+          // Heure illisible : on remet la dernière valeur valide et on dit pourquoi.
+          setTexte(valeur);
           impulsion('erreur');
+          onInvalide();
           return;
         }
         setTexte(n);
@@ -56,7 +70,7 @@ function ChampHeure({ valeur, libelle, onValider }: { valeur: string; libelle: s
       maxLength={5}
       selectTextOnFocus
       className={`min-h-[44px] min-w-[64px] rounded-lg border bg-surface2 dark:bg-surface2-dark px-1 py-2 text-center text-[15px] text-ink dark:text-ink-dark ${
-        erreur ? 'border-danger dark:border-danger-dark' : 'border-line dark:border-line-dark'
+        enErreur ? 'border-danger dark:border-danger-dark' : 'border-line dark:border-line-dark'
       }`}
     />
   );
@@ -67,27 +81,61 @@ type Props = { jour: number; plage: Plage | null; onChange: (p: Plage | null) =>
 export function LigneHoraire({ jour, plage, onChange, derniere }: Props) {
   const t = useTheme();
   const nom = JOURS[jour];
+  // Champ dont la dernière saisie a été refusée, le temps d'afficher le message.
+  const [refuse, setRefuse] = useState<'de' | 'a' | null>(null);
+
+  function invalide(champ: 'de' | 'a') {
+    setRefuse(champ);
+    AccessibilityInfo.announceForAccessibility(MESSAGE_HEURE);
+  }
+
   return (
     <Ligne derniere={derniere}>
       <Texte className="w-[76px]" numberOfLines={1}>
         {nom}
       </Texte>
-      <View className="flex-1 flex-row items-center gap-2">
-        {plage ? (
-          <>
-            <ChampHeure key={`de-${plage.de}`} libelle={`${nom}, ouverture`} valeur={plage.de} onValider={(de) => onChange({ de, a: plage.a })} />
-            <Legende>à</Legende>
-            <ChampHeure key={`a-${plage.a}`} libelle={`${nom}, fermeture`} valeur={plage.a} onValider={(a) => onChange({ de: plage.de, a })} />
-          </>
-        ) : (
-          <Legende>Fermé</Legende>
-        )}
+      <View className="flex-1">
+        <View className="flex-row items-center gap-2">
+          {plage ? (
+            <>
+              <ChampHeure
+                key={`de-${plage.de}`}
+                libelle={`${nom}, ouverture`}
+                valeur={plage.de}
+                enErreur={refuse === 'de'}
+                onValider={(de) => {
+                  setRefuse(null);
+                  onChange({ de, a: plage.a });
+                }}
+                onInvalide={() => invalide('de')}
+                onSaisie={() => setRefuse(null)}
+              />
+              <Legende>à</Legende>
+              <ChampHeure
+                key={`a-${plage.a}`}
+                libelle={`${nom}, fermeture`}
+                valeur={plage.a}
+                enErreur={refuse === 'a'}
+                onValider={(a) => {
+                  setRefuse(null);
+                  onChange({ de: plage.de, a });
+                }}
+                onInvalide={() => invalide('a')}
+                onSaisie={() => setRefuse(null)}
+              />
+            </>
+          ) : (
+            <Legende>Fermé</Legende>
+          )}
+        </View>
+        {plage && refuse ? <Erreur className="mt-1">{MESSAGE_HEURE}</Erreur> : null}
       </View>
       <Switch
         accessibilityLabel={`${nom}, ouvert`}
         value={plage !== null}
         onValueChange={(ouvert) => {
           impulsion();
+          setRefuse(null);
           onChange(ouvert ? PLAGE_PAR_DEFAUT : null);
         }}
         trackColor={{ true: t.accentFond, false: t.line }}

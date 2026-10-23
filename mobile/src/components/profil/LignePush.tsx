@@ -1,10 +1,14 @@
 /**
  * « Notifications sur ce téléphone » : état de la permission et geste
  * d'activation. Rien n'est demandé sans appui sur la ligne.
+ *
+ * L'état est relu à chaque retour au premier plan : après une autorisation
+ * dans les réglages du téléphone, la ligne passe à « Activées » et le jeton
+ * de l'appareil est enregistré sans nouvelle demande.
  */
 
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, Linking, Platform, View } from 'react-native';
 
 import { Legende, Ligne, Pastille, Texte, impulsion } from '@/components/ui';
 import { enregistrerPushSiPossible, etatPermissionPush, type EtatPush } from '@/lib/push';
@@ -16,19 +20,47 @@ export function LignePush({ membreId, derniere }: { membreId: string; derniere?:
   const t = useTheme();
   const [etat, setEtat] = useState<Etat>('inconnu');
   const [enCours, setEnCours] = useState(false);
+  // Copies lues par l'écouteur AppState, qui ne voit pas les rendus suivants.
+  const etatRef = useRef<Etat>('inconnu');
+  const enCoursRef = useRef(false);
 
   useEffect(() => {
     let vivant = true;
-    void etatPermissionPush().then((e) => {
-      if (vivant) setEtat(e);
+
+    async function relire(auRetour: boolean) {
+      // Pendant une activation, la demande système fait passer l'app en arrière-plan : on ne relit pas.
+      if (enCoursRef.current) return;
+      const e = await etatPermissionPush();
+      if (!vivant || enCoursRef.current) return;
+      const avant = etatRef.current;
+      if (auRetour && e === 'accordee' && avant !== 'accordee' && avant !== 'inconnu') {
+        // Autorisées dans les réglages : le jeton s'enregistre, sans nouvelle demande.
+        enCoursRef.current = true;
+        setEnCours(true);
+        const r = await enregistrerPushSiPossible(membreId);
+        enCoursRef.current = false;
+        if (!vivant) return;
+        etatRef.current = r.etat;
+        setEtat(r.etat);
+        setEnCours(false);
+        return;
+      }
+      etatRef.current = e;
+      setEtat(e);
+    }
+
+    void relire(false);
+    const abonnement = AppState.addEventListener('change', (s) => {
+      if (s === 'active') void relire(true);
     });
     return () => {
       vivant = false;
+      abonnement.remove();
     };
-  }, []);
+  }, [membreId]);
 
   async function activer() {
-    if (enCours) return;
+    if (enCoursRef.current) return;
     if (etat === 'refusee') {
       try {
         await Linking.openSettings();
@@ -37,10 +69,13 @@ export function LignePush({ membreId, derniere }: { membreId: string; derniere?:
       }
       return;
     }
+    enCoursRef.current = true;
     setEnCours(true);
     const r = await enregistrerPushSiPossible(membreId);
+    etatRef.current = r.etat;
     setEtat(r.etat);
     impulsion(r.etat === 'accordee' ? 'succes' : 'erreur');
+    enCoursRef.current = false;
     setEnCours(false);
   }
 

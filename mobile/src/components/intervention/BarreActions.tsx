@@ -105,7 +105,7 @@ export function BarreActions({ intervention: i, onAction, onPhoto }: Props) {
         )}
       </Verre>
 
-      <Feuille ouverte={blocages} onFermer={() => setBlocages(false)} titre="Qu’est-ce qui bloque ?">
+      <Feuille ouverte={blocages} onFermer={() => setBlocages(false)} titre="Qu’est-ce qui bloque ?">
         <Groupe>
           {choixBlocage.map((a, k) => (
             <Ligne

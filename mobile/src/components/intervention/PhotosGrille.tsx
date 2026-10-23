@@ -1,5 +1,6 @@
 /**
- * Photos d’un commentaire : grille de trois colonnes, appui = plein écran.
+ * Photos d’un commentaire : grille de trois colonnes, appui = plein écran,
+ * nouvel appui (sur la photo, le fond ou la croix) = fermeture.
  * Les vidéos sont signalées par une tuile sombre (pas de lecteur au MVP).
  */
 
@@ -43,14 +44,22 @@ export function PhotosGrille({ photos }: { photos: Photo[] }) {
 
       <Modal visible={ouverte !== null} transparent animationType="fade" onRequestClose={() => setOuverte(null)} statusBarTranslucent>
         <View className="flex-1 bg-black">
-          {ouverte?.video ? (
-            <View className="flex-1 items-center justify-center">
-              <Icone nom="camera" taille={40} couleur={t.blanc} />
-              <Text className="mt-3 text-[15px] text-white">La vidéo se lira depuis la page de suivi.</Text>
-            </View>
-          ) : ouverte ? (
-            <Image source={{ uri: ouverte.uri }} contentFit="contain" style={{ flex: 1 }} accessibilityLabel="Photo en plein écran" />
-          ) : null}
+          {/* Toucher la photo ou le fond referme aussi, pas seulement la croix. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={ouverte?.video ? 'Vidéo en plein écran' : 'Photo en plein écran'}
+            accessibilityHint="Touchez pour fermer"
+            onPress={() => setOuverte(null)}
+            className="flex-1">
+            {ouverte?.video ? (
+              <View className="flex-1 items-center justify-center">
+                <Icone nom="camera" taille={40} couleur={t.blanc} />
+                <Text className="mt-3 text-[15px] text-white">La vidéo se lira depuis la page de suivi.</Text>
+              </View>
+            ) : ouverte ? (
+              <Image source={{ uri: ouverte.uri }} contentFit="contain" style={{ flex: 1 }} accessible={false} />
+            ) : null}
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Fermer"

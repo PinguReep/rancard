@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Carte, Ecran, Legende, Secondaire, Section, Texte, impulsion } from '@/components/ui';
 import { BACKEND } from '@/data';
+import { mailtoHref } from '@/lib/format';
 
 const CONTACT = 'support@rencar.example';
 
@@ -50,7 +51,7 @@ export default function Confidentialite() {
 
   function ecrire() {
     impulsion();
-    Linking.openURL(`mailto:${CONTACT}`).catch(() => {});
+    Linking.openURL(mailtoHref(CONTACT)).catch(() => {});
   }
 
   return (

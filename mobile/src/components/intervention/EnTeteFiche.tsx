@@ -116,9 +116,12 @@ export function EnTeteFiche({ intervention: i, client, vehicule, mecanicien, sms
               {nom}
             </Texte>
             {client.memo ? (
-              <View className="mt-0.5 flex-row items-center gap-1.5">
-                <Icone nom="horloge" taille={13} couleur={t.warn} />
-                <Legende ton="warn" className="flex-1 text-[14px]" numberOfLines={1}>
+              <View className="mt-0.5 flex-row items-start gap-1.5">
+                {/* Icône calée sur la première ligne quand le mémo en prend plusieurs. */}
+                <View className="mt-[3px]">
+                  <Icone nom="horloge" taille={13} couleur={t.warn} />
+                </View>
+                <Legende ton="warn" className="flex-1 text-[14px]" numberOfLines={3}>
                   {client.memo}
                 </Legende>
               </View>
