@@ -14,7 +14,7 @@ import { differenceInMinutes, isSameDay } from 'date-fns';
 import { POSTES, TOUTES_PERMISSIONS } from '@/domain/permissions';
 import type { Blocage, Commentaire, Intervention, Membre, Session, Statut } from '@/domain/types';
 import { STATUTS } from '@/domain/statuts';
-import type { Identifiants, NouveauMembre, NouvelleIntervention, Repo, Snapshot } from '@/data/repo';
+import type { Consultations, Identifiants, NouveauMembre, NouvelleIntervention, Repo, Snapshot } from '@/data/repo';
 
 import { DEMO_MEMBRE_ID, snapshotDemo } from './seed';
 
@@ -154,6 +154,28 @@ export class DemoRepo implements Repo {
 
   async demanderReinitialisation() {
     // Démo : rien à envoyer.
+  }
+
+  signalerConsultation(): void {
+    // Démo : personne d'autre pour la voir.
+  }
+
+  /**
+   * Démo : un collègue consulte en permanence l'intervention bloquée (i2) et
+   * la fiche de son client (c2), pour montrer l'indicateur de présence.
+   */
+  abonnerConsultations(cb: (c: Consultations) => void): () => void {
+    const collegue = this.snap?.membres.find((m) => m.actif && m.id !== this.membreId && m.role === 'gerant');
+    cb(collegue ? { 'intervention:i2': [collegue.id], 'client:c2': [collegue.id] } : {});
+    return () => undefined;
+  }
+
+  async reinitialiserMotDePasse(): Promise<Session> {
+    throw new Error('La démonstration n’a pas de mot de passe : touchez « Essayer avec le garage de démonstration ».');
+  }
+
+  async activerCompte(): Promise<Session> {
+    throw new Error('La démonstration n’a pas de compte à activer : touchez « Essayer avec le garage de démonstration ».');
   }
 
   async changerMotDePasse() {

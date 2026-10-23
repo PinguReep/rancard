@@ -1,7 +1,8 @@
 /**
- * Fiche client : coordonnées cliquables, mémo modifiable en place,
- * véhicules (kilométrage modifiable, ajout), historique des interventions,
- * action principale « Nouvelle intervention » ancrée en bas.
+ * Fiche client : coordonnées cliquables, mémo modifiable en place (par toute
+ * l'équipe qui voit le client), véhicules (kilométrage modifiable, ajout avec
+ * la permission creer), historique des interventions, action principale
+ * « Nouvelle intervention » ancrée en bas.
  */
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -11,6 +12,7 @@ import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ConsultationFiche } from '@/components/consultation';
 import { CarteVehicule } from '@/components/clients/CarteVehicule';
 import { FormulaireVehicule, VEHICULE_VIDE, validerVehicule, versVehicule, type ErreursVehicule, type ValeursVehicule } from '@/components/clients/FormulaireVehicule';
 import { LigneIntervention } from '@/components/clients/LigneIntervention';
@@ -18,8 +20,9 @@ import { ModaleFormulaire } from '@/components/clients/ModaleFormulaire';
 import { interventionsVisibles, pluriel } from '@/components/clients/outils';
 import { Avis, useAvis } from '@/components/intervention/Avis';
 import { Bouton, Champ, Ecran, Erreur, Groupe, Icone, LARGEUR_MAX, Legende, Ligne, Secondaire, Section, Texte, Titre, Vide, impulsion } from '@/components/ui';
+import { BarreClavier, HAUTEUR_BARRE_CLAVIER } from '@/components/ui/barre-clavier';
 import { repo } from '@/data';
-import { formaterTelephone, telHref } from '@/lib/format';
+import { formaterTelephone, mailtoHref, telHref } from '@/lib/format';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
 import { useTheme } from '@/theme/tokens';
 
@@ -124,7 +127,7 @@ export default function FicheClient() {
   return (
     <Ecran sansHaut>
       <KeyboardAwareScrollView
-        bottomOffset={p.creer ? 96 : 24}
+        bottomOffset={Math.max(p.creer ? 96 : 24, HAUTEUR_BARRE_CLAVIER + 24)}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
@@ -139,6 +142,7 @@ export default function FicheClient() {
         <Titre className="text-[30px] leading-[36px]">
           {client.prenom} {client.nom}
         </Titre>
+        <ConsultationFiche fiche={`client:${client.id}`} className="mt-3" />
 
         <Groupe className="mt-5">
           <Ligne
@@ -151,7 +155,7 @@ export default function FicheClient() {
             <Icone nom="telephone" taille={20} couleur={t.ok} />
           </Ligne>
           {client.email ? (
-            <Ligne onPress={() => void Linking.openURL(`mailto:${client.email}`)} derniere accessibilityLabel={`Écrire à ${client.email}`}>
+            <Ligne onPress={() => void Linking.openURL(mailtoHref(client.email ?? ''))} derniere accessibilityLabel={`Écrire à ${client.email}`}>
               <Texte ton="accent" numberOfLines={1} className="flex-1">
                 {client.email}
               </Texte>
@@ -186,9 +190,11 @@ export default function FicheClient() {
               </Animated.View>
             ))}
             {mesVehicules.length === 0 ? <Secondaire className="ml-1 mb-1">Aucun véhicule connu pour ce client.</Secondaire> : null}
-            <Bouton variante="secondaire" icone={<Icone nom="plus" taille={18} />} onPress={ouvrirModale}>
-              Ajouter un véhicule
-            </Bouton>
+            {p.creer ? (
+              <Bouton variante="secondaire" icone={<Icone nom="plus" taille={18} />} onPress={ouvrirModale}>
+                Ajouter un véhicule
+              </Bouton>
+            ) : null}
           </Animated.View>
         </Section>
 
@@ -234,6 +240,8 @@ export default function FicheClient() {
         }>
         <FormulaireVehicule valeurs={valeurs} onChange={setValeurs} erreurs={erreurs} autoFocus onSubmit={ajouterVehicule} />
       </ModaleFormulaire>
+      {/* Le kilométrage s’ouvre sur un pavé numérique sans touche de validation : « OK » au-dessus du clavier. */}
+      <BarreClavier />
       <Avis texte={avis} flottant />
     </Ecran>
   );

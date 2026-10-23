@@ -4,8 +4,8 @@
  */
 
 import { Stack } from 'expo-router';
-import { useState } from 'react';
-import { View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -34,12 +34,28 @@ export default function MonCompte() {
   const [erreurMdp, setErreurMdp] = useState<string | null>(null);
   const [mdpChange, setMdpChange] = useState(false);
   const [chargementMdp, setChargementMdp] = useState(false);
+  const champNouveau = useRef<TextInput>(null);
+  const champConfirmation = useRef<TextInput>(null);
 
   const [feuille, setFeuille] = useState(false);
   const [zoneOuverte, setZoneOuverte] = useState(false);
   const [saisie, setSaisie] = useState('');
   const [suppression, setSuppression] = useState(false);
   const [erreurSuppression, setErreurSuppression] = useState<string | null>(null);
+  const champSaisie = useRef<TextInput>(null);
+
+  // La saisie apparaît pendant que la feuille se ferme : `autoFocus` la rend
+  // visible, et ce second focus la rattrape si iOS rend la main au clavier
+  // seulement après la disparition de la feuille.
+  useEffect(() => {
+    if (!zoneOuverte) return;
+    const minuteur = setTimeout(() => {
+      champSaisie.current?.focus();
+    }, 400);
+    return () => {
+      clearTimeout(minuteur);
+    };
+  }, [zoneOuverte]);
 
   function enregistrerIdentite() {
     const p = prenom.trim();
@@ -107,6 +123,7 @@ export default function MonCompte() {
         contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}
         bottomOffset={24}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         contentInsetAdjustmentBehavior="automatic">
         <Section titre="Identité">
           <Champ libelle="Prénom" value={prenom} onChangeText={setPrenom} onBlur={enregistrerIdentite} autoComplete="given-name" textContentType="givenName" autoCapitalize="words" />
@@ -125,8 +142,18 @@ export default function MonCompte() {
           </Groupe>
         ) : (
           <Section titre="Mot de passe">
-            <Champ libelle="Mot de passe actuel" type="motdepasse" value={actuel} onChangeText={setActuel} textContentType="password" returnKeyType="next" />
             <Champ
+              libelle="Mot de passe actuel"
+              type="motdepasse"
+              value={actuel}
+              onChangeText={setActuel}
+              textContentType="password"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => champNouveau.current?.focus()}
+            />
+            <Champ
+              ref={champNouveau}
               libelle="Nouveau mot de passe"
               type="motdepasse"
               value={nouveau}
@@ -135,8 +162,11 @@ export default function MonCompte() {
               autoComplete="new-password"
               aide="Au moins 8 caractères."
               returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => champConfirmation.current?.focus()}
             />
             <Champ
+              ref={champConfirmation}
               libelle="Confirmer le nouveau mot de passe"
               type="motdepasse"
               value={confirmation}
@@ -163,11 +193,13 @@ export default function MonCompte() {
             <SousTitre>Dernière étape</SousTitre>
             <Secondaire className="mb-4 mt-1">Tapez {MOT_CLE} pour confirmer la suppression de votre compte.</Secondaire>
             <Champ
+              ref={champSaisie}
               libelle={`Tapez ${MOT_CLE}`}
               type="plaque"
               value={saisie}
               onChangeText={setSaisie}
               placeholder={MOT_CLE}
+              autoFocus
               returnKeyType="done"
               onSubmitEditing={supprimerCompte}
             />

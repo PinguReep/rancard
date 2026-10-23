@@ -12,6 +12,7 @@ import { View } from 'react-native';
 import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ConsultationFiche } from '@/components/consultation';
 import { interventionsVisibles } from '@/components/clients/outils';
 import { Avis } from '@/components/intervention/Avis';
 import { BarreActions, HAUTEUR_BARRE } from '@/components/intervention/BarreActions';
@@ -25,6 +26,7 @@ import { FilSuivi } from '@/components/intervention/FilSuivi';
 import { HistoriqueVehicule } from '@/components/intervention/HistoriqueVehicule';
 import { usePassageStatut } from '@/components/intervention/passage-statut';
 import { Bouton, BoutonRond, Ecran, Etiquette, FeuilleConfirmation, Vide, impulsion } from '@/components/ui';
+import { BarreClavier, HAUTEUR_BARRE_CLAVIER } from '@/components/ui/barre-clavier';
 import { repo } from '@/data';
 import { estGerant } from '@/domain/permissions';
 import { ecrire } from '@/lib/ecrire';
@@ -103,11 +105,13 @@ export default function FicheIntervention() {
       />
       <KeyboardAwareScrollView
         ref={defilement}
-        bottomOffset={HAUTEUR_BARRE + 24}
+        bottomOffset={Math.max(HAUTEUR_BARRE, HAUTEUR_BARRE_CLAVIER) + 24}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: HAUTEUR_BARRE + insets.bottom + 32 }}>
+        <ConsultationFiche fiche={`intervention:${i.id}`} className="mt-2" />
         <EnTeteFiche
           intervention={i}
           client={client}
@@ -128,8 +132,8 @@ export default function FicheIntervention() {
         </View>
 
         <View className="mt-8 gap-4">
-          <MemoInterne key={`memo-${i.memo ?? ''}`} intervention={i} onErreur={montrerAvis} />
-          {p.voirPrix ? <MontantEstime key={`montant-${i.montantEstime ?? ''}`} intervention={i} editable={estGerant(membre)} onErreur={montrerAvis} /> : null}
+          <MemoInterne intervention={i} onErreur={montrerAvis} />
+          {p.voirPrix ? <MontantEstime intervention={i} editable={estGerant(membre)} onErreur={montrerAvis} /> : null}
           <HistoriqueVehicule interventions={fiche.historique} onOuvrir={(autre) => router.push(`/intervention/${autre}`)} />
         </View>
       </KeyboardAwareScrollView>
@@ -178,7 +182,7 @@ export default function FicheIntervention() {
       />
       <FeuilleConfirmation
         ouverte={confirmerAnnulation}
-        titre="Annuler l’intervention ?"
+        titre="Annuler l’intervention ?"
         texte={`Le rendez-vous de ${nomClient} sera annulé. Le client lira « Rendez-vous annulé » sur sa page de suivi.`}
         libelle="Oui, annuler"
         variante="danger"
@@ -193,6 +197,8 @@ export default function FicheIntervention() {
         }}
         onFermer={() => setConfirmerAnnulation(false)}
       />
+      {/* Le montant s’ouvre sur un pavé numérique sans touche de validation : « OK » au-dessus du clavier. */}
+      <BarreClavier />
       <Avis texte={avis} flottant />
     </Ecran>
   );

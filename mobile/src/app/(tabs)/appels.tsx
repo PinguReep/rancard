@@ -20,10 +20,12 @@ import { Avis, useAvis } from '@/components/intervention/Avis';
 import { Ecran, Etiquette, Legende, Vide, impulsion, useMargeBasse } from '@/components/ui';
 import { repo } from '@/data';
 import type { Appel } from '@/domain/types';
+import { useControleRafraichir } from '@/hooks/use-rafraichir';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
 
 export default function Appels() {
   const router = useRouter();
+  const rafraichir = useControleRafraichir();
   const membre = useMembre();
   const p = usePermissions();
   const margeBasse = useMargeBasse();
@@ -138,6 +140,7 @@ export default function Appels() {
           </View>
         )}
         ListHeaderComponent={entete}
+        refreshControl={rafraichir}
         ListEmptyComponent={
           appels.length === 0 ? (
             <Vide icone="appels" titre="Aucun appel pour l’instant" texte="Les appels pris par le réceptionniste apparaîtront ici, avec leur résumé." />

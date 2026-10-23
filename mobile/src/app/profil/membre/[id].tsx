@@ -1,6 +1,9 @@
 /**
  * Fiche d'un membre (gérant) : rôle, poste, permissions à la carte, accès.
- * Chaque changement est enregistré immédiatement.
+ * Chaque changement est enregistré immédiatement, sauf la coupure de
+ * l'accès, confirmée dans une feuille (la réactivation reste immédiate).
+ * Le renvoi d'invitation n'existe qu'en démonstration : le dépôt n'a pas
+ * encore de méthode pour renvoyer l'e-mail.
  */
 
 import { Stack, useLocalSearchParams } from 'expo-router';
@@ -13,8 +16,8 @@ import { CarteIdentite } from '@/components/profil/CarteIdentite';
 import { GroupePoste, GroupeRole } from '@/components/profil/ChoixRolePoste';
 import { LigneInterrupteur } from '@/components/profil/LigneInterrupteur';
 import { useMembreCourant } from '@/components/profil/useMembreCourant';
-import { Bouton, Ecran, Groupe, Legende, Vide, impulsion } from '@/components/ui';
-import { repo } from '@/data';
+import { Bouton, Ecran, FeuilleConfirmation, Groupe, Legende, Vide, impulsion } from '@/components/ui';
+import { BACKEND, repo } from '@/data';
 import { PERMISSIONS_LABELS, POSTES, TOUTES_PERMISSIONS, estGerant, permissionsDe } from '@/domain/permissions';
 import type { Membre, Permissions, Poste, Role } from '@/domain/types';
 import { ecrire } from '@/lib/ecrire';
@@ -28,6 +31,7 @@ export default function FicheMembre() {
   const moi = useMembreCourant();
   const membres = useDonnees((s) => s.membres);
   const [invitationRenvoyee, setInvitationRenvoyee] = useState(false);
+  const [coupureAConfirmer, setCoupureAConfirmer] = useState(false);
   const [avis, montrerAvis] = useAvis();
 
   const m = membres.find((x) => x.id === id);
@@ -73,12 +77,20 @@ export default function FicheMembre() {
     enregistrer({ permissions: { ...m!.permissions, [cle]: valeur } });
   }
 
+  /** Démonstration seulement : aucun e-mail ne part, l'invitation reste en attente. */
   function renvoyerInvitation() {
     impulsion('succes');
     setInvitationRenvoyee(true);
   }
 
+  /** Couper l'accès passe par la feuille ; le rendre est immédiat. */
+  function changerAcces(actif: boolean) {
+    if (actif) enregistrer({ actif: true });
+    else setCoupureAConfirmer(true);
+  }
+
   const effectives = permissionsDe(m);
+  const renvoiPossible = BACKEND === 'demo';
 
   return (
     <Ecran sansHaut>
@@ -88,11 +100,13 @@ export default function FicheMembre() {
 
         {m.invitationEnAttente ? (
           <View className="mb-6">
-            <Bouton variante="secondaire" onPress={renvoyerInvitation} desactive={invitationRenvoyee}>
-              {invitationRenvoyee ? 'Invitation renvoyée' : 'Renvoyer l’invitation'}
-            </Bouton>
-            <Legende className="mt-2 text-center">
-              {invitationRenvoyee ? `Un nouvel e-mail part vers ${m.email}.` : 'Le membre n’a pas encore choisi son mot de passe.'}
+            {renvoiPossible ? (
+              <Bouton variante="secondaire" onPress={renvoyerInvitation} desactive={invitationRenvoyee} className="mb-2">
+                {invitationRenvoyee ? 'Invitation renvoyée' : 'Renvoyer l’invitation'}
+              </Bouton>
+            ) : null}
+            <Legende className="text-center">
+              {invitationRenvoyee ? 'En démonstration, aucun e-mail ne part.' : 'Le membre n’a pas encore choisi son mot de passe.'}
             </Legende>
           </View>
         ) : null}
@@ -135,9 +149,21 @@ export default function FicheMembre() {
                 ? 'Le garage doit garder un gérant actif.'
                 : 'Un membre désactivé ne peut plus se connecter. Ses interventions restent visibles.'
           }>
-          <LigneInterrupteur titre="Accès actif" valeur={m.actif} desactive={estMoi || dernierGerant} onChange={(v) => enregistrer({ actif: v })} derniere />
+          <LigneInterrupteur titre="Accès actif" valeur={m.actif} desactive={estMoi || dernierGerant} onChange={changerAcces} derniere />
         </Groupe>
       </ScrollView>
+      <FeuilleConfirmation
+        ouverte={coupureAConfirmer}
+        onFermer={() => setCoupureAConfirmer(false)}
+        titre={`Couper l’accès de ${m.prenom} ?`}
+        texte={`${m.prenom} ne pourra plus se connecter. Ses interventions restent visibles. Vous pourrez réactiver son accès à tout moment.`}
+        libelle="Couper l’accès"
+        variante="danger"
+        onConfirmer={() => {
+          setCoupureAConfirmer(false);
+          enregistrer({ actif: false });
+        }}
+      />
       <Avis texte={avis} flottant />
     </Ecran>
   );

@@ -10,10 +10,11 @@
  * l'appel est relié à la fiche créée).
  */
 
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { usePreventRemove, type NavigationAction } from 'expo-router/react-navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
-import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView, KeyboardStickyView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarClient } from '@/components/clients/AvatarClient';
@@ -25,7 +26,7 @@ import { EtapeClient } from '@/components/nouvelle-intervention/EtapeClient';
 import { EtapeIntervention, type ErreursIntervention, type ValeursIntervention } from '@/components/nouvelle-intervention/EtapeIntervention';
 import { Etapes, type Etape } from '@/components/nouvelle-intervention/Etapes';
 import { EtapeVehicule } from '@/components/nouvelle-intervention/EtapeVehicule';
-import { Bouton, BoutonRond, Ecran, Erreur, Groupe, Icone, LARGEUR_MAX, Ligne, Mono, Secondaire, SousTitre, Texte, Vide, impulsion } from '@/components/ui';
+import { Bouton, BoutonRond, Ecran, Erreur, FeuilleConfirmation, Groupe, Icone, LARGEUR_MAX, Ligne, Mono, Secondaire, SousTitre, Texte, Vide, impulsion } from '@/components/ui';
 import { repo, type NouvelleIntervention as Nouvelle } from '@/data';
 import type { Client, Vehicule } from '@/domain/types';
 import { formaterPlaque, formaterTelephone } from '@/lib/format';
@@ -40,6 +41,7 @@ export default function NouvelleIntervention() {
   const telephoneParam = params.telephone?.trim() || undefined;
   const appelId = params.appelId || undefined;
   const router = useRouter();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const t = useTheme();
   const membre = useMembre();
@@ -98,7 +100,8 @@ export default function NouvelleIntervention() {
       jour: jour.cle,
       creneau: premierCreneauLibre(jour.date, garage.horaires)?.iso ?? null,
       dureeMin: DUREE_PAR_DEFAUT,
-      membreId: null,
+      // Sans « voir tout », une fiche sans mécanicien disparaîtrait de son planning : elle lui revient d'office.
+      membreId: p.voirTout ? null : membre.id,
       prioritaire: false,
       memo: '',
       montant: '',
@@ -117,6 +120,32 @@ export default function NouvelleIntervention() {
     () => (choixClient?.mode === 'existant' ? vehicules.filter((v) => v.clientId === choixClient.client.id) : []),
     [vehicules, choixClient],
   );
+
+  // ── Fermeture (croix, glissement de la modale) : rien ne se perd sans prévenir.
+  // Empreinte de ce qui serait perdu, comparée à l'état d'ouverture (client
+  // présélectionné depuis une fiche, numéro venu d'un appel).
+  const empreinte = JSON.stringify([
+    choixClient?.mode === 'existant' ? choixClient.client.id : (choixClient?.mode ?? null),
+    choixVehicule?.mode === 'existant' ? choixVehicule.vehicule.id : (choixVehicule?.mode ?? null),
+    valeursClient,
+    valeursVehicule,
+    valeurs,
+  ]);
+  const [empreinteOuverture] = useState(empreinte);
+  const saisieCommencee = empreinte !== empreinteOuverture;
+  const enregistree = useRef(false);
+  const [sortie, setSortie] = useState<NavigationAction | null>(null);
+  usePreventRemove(saisieCommencee && !enCours, ({ data }) => {
+    if (enregistree.current) {
+      navigation.dispatch(data.action);
+      return;
+    }
+    setSortie(data.action);
+  });
+
+  // Hauteur du pied collé au clavier : le champ actif reste visible juste au-dessus.
+  const [hauteurPied, setHauteurPied] = useState(0);
+  const ecartPied = hauteurPied > 0 ? hauteurPied - insets.bottom + 16 : 96;
 
   useEffect(() => {
     defilement.current?.scrollTo({ y: 0, animated: false });
@@ -197,7 +226,9 @@ export default function NouvelleIntervention() {
     setErreurs(e);
     if (Object.keys(e).length || !valeurs.creneau) {
       impulsion('erreur');
-      defilement.current?.scrollTo({ y: 0, animated: true });
+      // Prestation et créneau sont en haut ; le montant, seul en bas, reste sous les yeux.
+      if (e.prestation || e.creneau || !valeurs.creneau) defilement.current?.scrollTo({ y: 0, animated: true });
+      else defilement.current?.scrollToEnd({ animated: true });
       return;
     }
     const n: Nouvelle = {
@@ -223,7 +254,11 @@ export default function NouvelleIntervention() {
         await repo().lierAppel(appelId, cree.id).catch(() => {});
       }
       impulsion('succes');
-      router.replace(`/intervention/${cree.id}`);
+      enregistree.current = true;
+      // Sans « voir tout », une fiche confiée à un autre n'est pas visible par son
+      // créateur : on revient au planning plutôt que d'ouvrir « introuvable ».
+      if (p.voirTout || cree.membreId === membre.id) router.replace(`/intervention/${cree.id}`);
+      else router.back();
     } catch (err) {
       setErreurGlobale((err as Error).message || 'Impossible d’ajouter l’intervention pour le moment.');
       setEnCours(false);
@@ -282,7 +317,7 @@ export default function NouvelleIntervention() {
 
       <KeyboardAwareScrollView
         ref={defilement}
-        bottomOffset={pied ? 96 : 24}
+        bottomOffset={pied ? ecartPied : 24}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32 }}>
@@ -363,18 +398,39 @@ export default function NouvelleIntervention() {
         ) : null}
 
         {etape === 3 ? (
-          <EtapeIntervention valeurs={valeurs} onChange={setValeurs} erreurs={erreurs} garage={garage} membres={equipe} voirPrix={p.voirPrix} />
+          <EtapeIntervention valeurs={valeurs} onChange={setValeurs} erreurs={erreurs} garage={garage} membres={equipe} voirPrix={p.voirPrix} plusTard={p.voirTout} />
         ) : null}
       </KeyboardAwareScrollView>
 
       {pied ? (
-        <View className="border-t border-line bg-bg px-4 pt-3 dark:border-line-dark dark:bg-bg-dark" style={{ paddingBottom: insets.bottom + 12 }}>
-          <View className="w-full self-center" style={{ maxWidth: LARGEUR_MAX }}>
-            {erreurGlobale ? <Erreur className="mb-2">{erreurGlobale}</Erreur> : null}
-            {pied}
+        // Collé au clavier ouvert ; la marge de la zone sûre passe alors sous le clavier.
+        <KeyboardStickyView offset={{ opened: insets.bottom }}>
+          <View
+            className="border-t border-line bg-bg px-4 pt-3 dark:border-line-dark dark:bg-bg-dark"
+            style={{ paddingBottom: insets.bottom + 12 }}
+            onLayout={(e) => setHauteurPied(e.nativeEvent.layout.height)}>
+            <View className="w-full self-center" style={{ maxWidth: LARGEUR_MAX }}>
+              {erreurGlobale ? <Erreur className="mb-2">{erreurGlobale}</Erreur> : null}
+              {pied}
+            </View>
           </View>
-        </View>
+        </KeyboardStickyView>
       ) : null}
+
+      <FeuilleConfirmation
+        ouverte={sortie !== null}
+        onFermer={() => setSortie(null)}
+        titre="Abandonner la saisie ?"
+        texte="Le client, le véhicule et le créneau choisis ne seront pas enregistrés."
+        libelle="Abandonner"
+        variante="danger"
+        onConfirmer={() => {
+          const action = sortie;
+          setSortie(null);
+          // La feuille se ferme d'abord : deux fermetures simultanées se gênent sur iOS.
+          if (action) setTimeout(() => navigation.dispatch(action), 240);
+        }}
+      />
     </Ecran>
   );
 }

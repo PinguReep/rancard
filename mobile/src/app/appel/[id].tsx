@@ -113,13 +113,18 @@ export default function FicheAppel() {
             {quand(appel.debut)} · {dureeSecondes(appel.dureeSec)}
           </Legende>
 
-          <View className="mt-6">
-            <Bouton variante="secondaire" desactive icone={<Icone nom="message" taille={18} couleur={t.ink} />}>
-              Réécouter l’enregistrement
+          {/* Pas de bouton « Réécouter » tant que la lecture n’existe pas : rappeler vient juste sous le numéro. */}
+          <View className="mt-6 gap-2">
+            <Bouton onPress={appeler} icone={<Icone nom="telephone" taille={18} couleur={t.blanc} />}>
+              Rappeler
             </Bouton>
-            <Legende className="mt-2 text-center">
-              {appel.enregistrementUrl ? 'Bientôt disponible' : 'Aucun enregistrement pour cet appel.'}
-            </Legende>
+            {!intervention && p.creer ? (
+              <Bouton
+                variante="secondaire"
+                onPress={() => router.push({ pathname: '/nouvelle-intervention', params: { telephone: appel.numero, appelId: appel.id } })}>
+                Créer une intervention
+              </Bouton>
+            ) : null}
           </View>
 
           <Section titre="Résumé automatique" className="mt-8">
@@ -158,19 +163,6 @@ export default function FicheAppel() {
               </Carte>
             </Section>
           ) : null}
-
-          <View className="mt-2 gap-2">
-            <Bouton onPress={appeler} icone={<Icone nom="telephone" taille={18} couleur={t.blanc} />}>
-              Rappeler
-            </Bouton>
-            {!intervention && p.creer ? (
-              <Bouton
-                variante="secondaire"
-                onPress={() => router.push({ pathname: '/nouvelle-intervention', params: { telephone: appel.numero, appelId: appel.id } })}>
-                Créer une intervention
-              </Bouton>
-            ) : null}
-          </View>
         </View>
       </Ecran>
     </>

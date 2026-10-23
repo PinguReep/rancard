@@ -15,9 +15,22 @@ import { LigneClient } from '@/components/clients/LigneClient';
 import { ModaleFormulaire } from '@/components/clients/ModaleFormulaire';
 import { clientsVisibles, fichesClients, filtrerFiches, interventionsVisibles, type FicheClient } from '@/components/clients/outils';
 import { Entete } from '@/components/entete';
+import { devinerNom } from '@/components/nouvelle-intervention/EtapeClient';
 import { Bouton, BoutonRond, Ecran, Erreur, Vide, impulsion, useMargeBasse } from '@/components/ui';
 import { repo } from '@/data';
+import { formaterTelephone } from '@/lib/format';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
+
+/**
+ * Recherche sans résultat → départ du formulaire : un numéro (0… ou +…) va
+ * au mobile, des mots vont au prénom et au nom ; le reste (plaque, « 208 »)
+ * laisse le formulaire vide.
+ */
+function depuisRecherche(requete: string): Partial<ValeursClient> {
+  const q = requete.trim();
+  if (/^(\+|0)[\d\s.()-]*$/.test(q)) return { telephone: formaterTelephone(q) };
+  return devinerNom(q);
+}
 
 export default function Clients() {
   const router = useRouter();
@@ -31,6 +44,8 @@ export default function Clients() {
   const [requete, setRequete] = useState('');
   const [modale, setModale] = useState(false);
   const [valeurs, setValeurs] = useState<ValeursClient>(CLIENT_VIDE);
+  // Valeurs à l'ouverture : tant que rien n'a changé, la feuille se ferme d'un glissement.
+  const [initiales, setInitiales] = useState<ValeursClient>(CLIENT_VIDE);
   const [erreurs, setErreurs] = useState<ErreursClient>({});
   const [erreurGlobale, setErreurGlobale] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
@@ -41,8 +56,13 @@ export default function Clients() {
   );
   const resultats = useMemo(() => filtrerFiches(fiches, requete), [fiches, requete]);
 
+  const formulaireVide = (Object.keys(valeurs) as (keyof ValeursClient)[]).every((k) => valeurs[k] === initiales[k]);
+
   function ouvrirModale() {
-    setValeurs(CLIENT_VIDE);
+    // Recherche sans résultat : le formulaire reprend ce qui a été tapé.
+    const depart = requete.trim() && resultats.length === 0 ? { ...CLIENT_VIDE, ...depuisRecherche(requete) } : CLIENT_VIDE;
+    setValeurs(depart);
+    setInitiales(depart);
     setErreurs({});
     setErreurGlobale(null);
     setModale(true);
@@ -123,6 +143,7 @@ export default function Clients() {
         ouverte={modale}
         onFermer={() => setModale(false)}
         titre="Nouveau client"
+        vide={formulaireVide && !enCours}
         pied={
           <View>
             {erreurGlobale ? <Erreur className="mb-3">{erreurGlobale}</Erreur> : null}

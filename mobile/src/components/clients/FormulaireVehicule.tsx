@@ -4,7 +4,8 @@
  * n'empêche pas l'enregistrement (anciennes immatriculations, étranger).
  */
 
-import { View } from 'react-native';
+import { useRef } from 'react';
+import { View, type TextInput } from 'react-native';
 
 import { Champ } from '@/components/ui/champ';
 import { PLAQUE_SIV, formaterPlaque } from '@/lib/format';
@@ -61,6 +62,19 @@ type Props = {
 
 export function FormulaireVehicule({ valeurs, onChange, erreurs, autoFocus, onSubmit }: Props) {
   const maj = (patch: Partial<ValeursVehicule>) => onChange({ ...valeurs, ...patch });
+  // Enchaînement au clavier : Plaque → Marque → Modèle → Version → Année → Kilométrage.
+  const champMarque = useRef<TextInput>(null);
+  const champModele = useRef<TextInput>(null);
+  const champVersion = useRef<TextInput>(null);
+  const champAnnee = useRef<TextInput>(null);
+  const champKm = useRef<TextInput>(null);
+
+  function saisirAnnee(annee: string) {
+    maj({ annee });
+    // Le pavé numérique n'a pas de touche Entrée : le quatrième chiffre passe au kilométrage.
+    if (/^\d{4}$/.test(annee) && valeurs.annee.replace(/\D/g, '').length < 4) champKm.current?.focus();
+  }
+
   return (
     <View>
       <Champ
@@ -74,50 +88,73 @@ export function FormulaireVehicule({ valeurs, onChange, erreurs, autoFocus, onSu
         autoFocus={autoFocus}
         placeholder="AA-008-AA"
         maxLength={12}
+        returnKeyType="next"
+        submitBehavior="submit"
+        onSubmitEditing={() => champMarque.current?.focus()}
       />
       <View className="flex-row gap-3">
         <View className="flex-1">
           <Champ
+            ref={champMarque}
             libelle="Marque"
             value={valeurs.marque}
             onChangeText={(marque) => maj({ marque })}
             erreur={erreurs.marque}
             autoCapitalize="words"
+            autoCorrect={false}
             placeholder="Peugeot"
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => champModele.current?.focus()}
           />
         </View>
         <View className="flex-1">
           <Champ
+            ref={champModele}
             libelle="Modèle"
             value={valeurs.modele}
             onChangeText={(modele) => maj({ modele })}
             erreur={erreurs.modele}
             autoCapitalize="words"
+            autoCorrect={false}
             placeholder="208"
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => champVersion.current?.focus()}
           />
         </View>
       </View>
       <Champ
+        ref={champVersion}
         libelle="Version (facultatif)"
         value={valeurs.version}
         onChangeText={(version) => maj({ version })}
         placeholder="1.5 BlueHDi"
         autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="next"
+        submitBehavior="submit"
+        onSubmitEditing={() => champAnnee.current?.focus()}
       />
       <View className="flex-row gap-3">
         <View className="flex-1">
           <Champ
+            ref={champAnnee}
             libelle="Année"
             type="nombre"
             value={valeurs.annee}
-            onChangeText={(annee) => maj({ annee })}
+            onChangeText={saisirAnnee}
             erreur={erreurs.annee}
             placeholder="2019"
             maxLength={4}
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => champKm.current?.focus()}
           />
         </View>
         <View className="flex-1">
           <Champ
+            ref={champKm}
             libelle="Kilométrage"
             type="nombre"
             value={valeurs.km}
