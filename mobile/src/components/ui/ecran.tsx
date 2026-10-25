@@ -78,12 +78,19 @@ export function Ecran({ children, defilant, sansHaut, onRafraichir, rafraichisse
   return (
     <View {...p} className={`flex-1 bg-bg dark:bg-bg-dark ${className}`} style={{ paddingTop }}>
       <Halo />
-      {/* Toucher hors d'un champ ferme le clavier (les boutons et les listes gardent leurs gestes). */}
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      {/* Toucher hors d'un champ ferme le clavier (les boutons et les listes gardent leurs gestes).
+          Pas sur le web : le clic qui donne le focus à un champ remonterait jusqu'ici et le lui retirerait. */}
+      {Platform.OS === 'web' ? (
         <View className="flex-1 w-full self-center" style={{ maxWidth: LARGEUR_MAX }}>
           {children}
         </View>
-      </TouchableWithoutFeedback>
+      ) : (
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View className="flex-1 w-full self-center" style={{ maxWidth: LARGEUR_MAX }}>
+            {children}
+          </View>
+        </TouchableWithoutFeedback>
+      )}
     </View>
   );
 }

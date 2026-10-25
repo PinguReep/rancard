@@ -100,7 +100,18 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EAS_LOCAL_BUILD_PLUGIN_PATH: ${{ github.workspace }}/.github/outils/node_modules/.bin/eas-cli-local-build-plugin
+          # Facultatifs : sans eux, l'app est compilée en démonstration seule.
+          # La clé anon est publique par nature (embarquée dans l'app) ; secret pour rester hors du dépôt et des journaux.
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
+          if [ -n "$EXPO_PUBLIC_SUPABASE_URL" ] && [ -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY" ]; then
+            export EXPO_PUBLIC_BACKEND=supabase
+            echo "Backend : serveur (secrets Supabase présents)."
+          else
+            export EXPO_PUBLIC_BACKEND=demo
+            echo "::warning::Secrets Supabase absents : app compilée en démonstration seule."
+          fi
           if ! ../.github/outils/node_modules/.bin/eas build --platform ios --profile testflight --local \
                --non-interactive --freeze-credentials --output "$RUNNER_TEMP/rencar.ipa" \
                > "$RUNNER_TEMP/build.log" 2>&1; then
