@@ -222,9 +222,21 @@ export const evenementsDemo: Evenement[] = [
 
 export const appelsDemo: Appel[] = [
   {
-    id: 'a0', garageId: GARAGE_ID, numero: '06 39 98 00 19', debut: addMinutes(new Date(), -1).toISOString(), dureeSec: 41,
+    id: 'a0', garageId: GARAGE_ID, numero: '06 39 98 00 19', appelant: 'Hugo Girard', debut: addMinutes(new Date(), -1).toISOString(), dureeSec: 41,
     horsHoraires: false, enCours: true, issue: 'renseignement',
     resume: 'L’appelante signale un sifflement au freinage depuis deux jours. Le réceptionniste propose un contrôle des freins cette semaine.',
+    contexte: {
+      etape: 'vehicule',
+      champs: {
+        prenom: { valeur: 'Hugo', confirme: true },
+        nom: { valeur: 'Girard', confirme: true },
+        telephoneRappel: { valeur: '+33639980019', confirme: true },
+        marque: { valeur: 'Renault', confirme: true },
+        modele: { valeur: 'Mégane', confirme: false },
+        motif: { valeur: 'Bruit de roulement à l’avant droit, plus fort en virage.', confirme: true },
+      },
+      majLe: new Date().toISOString(),
+    },
   },
   {
     id: 'a1', garageId: GARAGE_ID, numero: '06 39 98 00 18', appelant: 'Nicolas Fabre', debut: depuis(47), dureeSec: 138,

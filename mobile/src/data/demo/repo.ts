@@ -9,8 +9,9 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { differenceInMinutes, isSameDay } from 'date-fns';
+import { isSameDay } from 'date-fns';
 
+import { appelEnDirect } from '@/domain/appels';
 import { POSTES, TOUTES_PERMISSIONS } from '@/domain/permissions';
 import type { Blocage, Commentaire, Intervention, Membre, Session, Statut } from '@/domain/types';
 import { STATUTS } from '@/domain/statuts';
@@ -28,11 +29,11 @@ const maintenant = () => new Date().toISOString();
 
 const COULEURS = ['#2f6bff', '#d92632', '#1f9d55', '#d98b00', '#7c3aed', '#0891b2'];
 
-/** Un appel « en cours » depuis plus de dix minutes est terminé (instantané d'un autre jour). */
+/** Un appel « en cours » depuis plus de 15 minutes est terminé (instantané d'un autre jour), comme côté serveur. */
 function cloreAppelsAnciens(s: Snapshot) {
-  const now = new Date();
+  const now = Date.now();
   for (const a of s.appels) {
-    if (a.enCours && differenceInMinutes(now, new Date(a.debut)) > 10) a.enCours = false;
+    if (a.enCours && !appelEnDirect(a, now)) a.enCours = false;
   }
 }
 

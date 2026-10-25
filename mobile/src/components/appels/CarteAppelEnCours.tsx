@@ -1,11 +1,14 @@
 /**
- * Appel en cours de traitement par le réceptionniste : carte verte, point
- * qui pulse, durée qui défile, résumé en direct, et un geste : prendre
- * l'appel depuis son propre téléphone.
+ * Appel en cours avec le réceptionniste : carte verte, point qui pulse,
+ * durée qui défile, et la fiche qui se remplit en direct à mesure que
+ * l'appelant confirme ses informations (outil update_call_context de
+ * l'agent, via Realtime). Pas d'action : l'appelant est en ligne avec le
+ * réceptionniste ; le rappel et la fiche à valider viennent à la fin de
+ * l'appel. Texte affiché tel quel : il est dicté par l'appelant.
  */
 
 import { useEffect, useState } from 'react';
-import { Linking, View } from 'react-native';
+import { View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -16,19 +19,29 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Bouton } from '@/components/ui/bouton';
-import { impulsion } from '@/components/ui/haptique';
-import { Icone } from '@/components/ui/icone';
+import { Plaque } from '@/components/ui/plaque';
 import { Etiquette, Legende, Secondaire, Texte } from '@/components/ui/texte';
-import type { Appel } from '@/domain/types';
-import { dureeSecondes, formaterTelephone, telHref } from '@/lib/format';
-import { useTheme } from '@/theme/tokens';
+import { LIBELLES_ETAPE } from '@/domain/appels';
+import type { Appel, ChampContexte } from '@/domain/types';
+import { dureeSecondes, formaterPlaque, formaterTelephone, ilYA, kilometrage } from '@/lib/format';
 
 const secondesDepuis = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
 
-export function CarteAppelEnCours({ appel }: { appel: Appel }) {
-  const t = useTheme();
+/** Une information de la fiche : libellé, valeur, et « à confirmer » si l'appelant ne l'a pas encore validée. */
+function Info({ libelle, champ, valeur }: { libelle: string; champ?: ChampContexte; valeur?: string }) {
+  if (!valeur) return null;
+  return (
+    <View accessible accessibilityLabel={`${libelle} : ${valeur}${champ && !champ.confirme ? ', à confirmer' : ''}`}>
+      <Legende>{libelle}</Legende>
+      <View className="mt-0.5 flex-row flex-wrap items-baseline gap-x-2">
+        <Texte selectable>{valeur}</Texte>
+        {champ && !champ.confirme ? <Legende ton="warn">à confirmer</Legende> : null}
+      </View>
+    </View>
+  );
+}
 
+export function CarteAppelEnCours({ appel }: { appel: Appel }) {
   // Halo qui respire autour du point vert.
   const souffle = useSharedValue(1);
   useEffect(() => {
@@ -40,24 +53,32 @@ export function CarteAppelEnCours({ appel }: { appel: Appel }) {
     transform: [{ scale: 2.4 - souffle.value * 1.2 }],
   }));
 
-  // Durée écoulée depuis le début de l'appel.
+  // Durée écoulée depuis le début de l'appel (rafraîchit aussi « mis à jour il y a… »).
   const [ecoule, setEcoule] = useState(() => secondesDepuis(appel.debut));
   useEffect(() => {
     const id = setInterval(() => setEcoule(secondesDepuis(appel.debut)), 1000);
     return () => clearInterval(id);
   }, [appel.debut]);
 
-  const prendre = () => {
-    impulsion('moyen');
-    Linking.openURL(telHref(appel.numero)).catch(() => {
-      // pas d'application téléphone (web, simulateur) : rien à faire
-    });
-  };
+  const c = appel.contexte?.champs ?? {};
+  const nomDicte = [c.prenom?.valeur, c.nom?.valeur].filter(Boolean).join(' ');
+  const numero = appel.numero ? formaterTelephone(appel.numero) : '';
+  const titre = appel.appelant || nomDicte || numero || 'Numéro masqué';
+  const sousTitre = titre !== numero ? numero : '';
+  // Le numéro de rappel n'est repris que s'il diffère de celui qui appelle.
+  const rappelDicte = c.telephoneRappel ? formaterTelephone(c.telephoneRappel.valeur) : '';
+  const rappel = rappelDicte !== numero ? rappelDicte : '';
+  const vehicule = [c.marque?.valeur, c.modele?.valeur].filter(Boolean).join(' ');
+  const vehiculeConfirme = [c.marque, c.modele].every((x) => !x || x.confirme);
+  const plaque = c.immatriculation ? formaterPlaque(c.immatriculation.valeur) : '';
+  const km = c.kilometrage ? kilometrage(Number(c.kilometrage.valeur)) : '';
+  const etape = appel.contexte?.etape;
+  const rien = !rappel && !vehicule && !plaque && !km && !c.motif;
 
   return (
     <Animated.View
       entering={FadeIn.duration(240)}
-      accessibilityLabel={`Appel en cours, ${appel.appelant ?? formaterTelephone(appel.numero)}, ${dureeSecondes(ecoule)}`}
+      accessibilityLabel={`Appel en cours, ${titre}, ${dureeSecondes(ecoule)}`}
       className="mx-4 mb-6 rounded-2xl border border-ok bg-ok-soft p-4 dark:border-ok-dark dark:bg-ok-softdark">
       <View className="flex-row items-center gap-2.5">
         <View className="h-3 w-3 items-center justify-center">
@@ -71,18 +92,46 @@ export function CarteAppelEnCours({ appel }: { appel: Appel }) {
       </View>
 
       <Texte className="mt-3 font-semibold" numberOfLines={1}>
-        {appel.appelant ?? formaterTelephone(appel.numero)}
+        {titre}
       </Texte>
-      {appel.appelant ? <Legende>{formaterTelephone(appel.numero)}</Legende> : null}
+      {sousTitre ? <Legende>{sousTitre}</Legende> : null}
+      {etape ? (
+        <Legende ton="ok" className="mt-1">
+          {`Étape : ${LIBELLES_ETAPE[etape]}`}
+        </Legende>
+      ) : null}
 
-      <Etiquette className="mt-4">Résumé en direct</Etiquette>
-      <Secondaire className="mt-1">{appel.resume}</Secondaire>
-
-      <View className="mt-5">
-        <Bouton onPress={prendre} icone={<Icone nom="telephone" taille={18} couleur={t.blanc} />}>
-          Prendre l’appel
-        </Bouton>
-      </View>
+      <Etiquette className="mt-4">Fiche en direct</Etiquette>
+      {rien ? (
+        <Secondaire className="mt-1">
+          Le réceptionniste est en ligne. Les informations confirmées par l’appelant s’affichent ici au fil de l’appel.
+        </Secondaire>
+      ) : (
+        <View className="mt-2 gap-3">
+          <Info libelle="Numéro de rappel" champ={c.telephoneRappel} valeur={rappel} />
+          <Info
+            libelle="Véhicule"
+            champ={vehicule ? { valeur: vehicule, confirme: vehiculeConfirme } : undefined}
+            valeur={vehicule}
+          />
+          {plaque ? (
+            <View
+              accessible
+              accessibilityLabel={`Immatriculation : ${plaque.split('').join(' ')}${c.immatriculation?.confirme ? '' : ', à confirmer'}`}>
+              <Legende>Immatriculation</Legende>
+              <View className="mt-1 flex-row items-center gap-2">
+                <Plaque plaque={plaque} />
+                {c.immatriculation?.confirme ? null : <Legende ton="warn">à confirmer</Legende>}
+              </View>
+            </View>
+          ) : null}
+          <Info libelle="Kilométrage" champ={c.kilometrage} valeur={km} />
+          <Info libelle="Motif" champ={c.motif} valeur={c.motif?.valeur} />
+        </View>
+      )}
+      {appel.contexte?.majLe ? (
+        <Legende className="mt-4">{`Mis à jour ${ilYA(appel.contexte.majLe)}`}</Legende>
+      ) : null}
     </Animated.View>
   );
 }

@@ -9,7 +9,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Linking, Platform, Pressable, View } from 'react-native';
 
 import { PastilleHorsHoraires, PastilleIssue } from '@/components/appels/PastilleIssue';
-import { Bouton, Carte, Ecran, Icone, Legende, Mono, PastilleStatut, Section, Texte, Titre, Vide, impulsion } from '@/components/ui';
+import { Bouton, Carte, Ecran, Icone, Legende, Mono, PastilleStatut, Secondaire, Section, Texte, Titre, Vide, impulsion } from '@/components/ui';
 import { dureeSecondes, formaterTelephone, quand, telHref } from '@/lib/format';
 import { useDonnees, usePermissions } from '@/state/session';
 import { useTheme } from '@/theme/tokens';
@@ -129,7 +129,7 @@ export default function FicheAppel() {
 
           <Section titre="Résumé automatique" className="mt-8">
             <Carte className="p-4">
-              <Texte>{appel.resume}</Texte>
+              {appel.resume ? <Texte>{appel.resume}</Texte> : <Secondaire>Aucun compte rendu reçu pour cet appel.</Secondaire>}
             </Carte>
           </Section>
 

@@ -209,6 +209,32 @@ export type Appel = {
   enregistrementUrl?: string;
   /** Intervention créée automatiquement, à valider */
   interventionId?: string;
+  /** Pendant l'appel : ce que le réceptionniste a déjà noté (outil update_call_context) */
+  contexte?: ContexteAppel;
+};
+
+/** Étape de l'appel en direct, annoncée par le réceptionniste. */
+export type EtapeAppel = 'accueil' | 'identification' | 'vehicule' | 'motif' | 'reformulation' | 'transfert' | 'cloture';
+
+export type CleContexte =
+  | 'prenom'
+  | 'nom'
+  | 'telephoneRappel'
+  | 'marque'
+  | 'modele'
+  | 'immatriculation'
+  | 'kilometrage'
+  | 'motif';
+
+/** Information notée pendant l'appel : confirmée (relue et approuvée par l'appelant) ou seulement déclarée. */
+export type ChampContexte = { valeur: string; confirme: boolean };
+
+/** Contexte évolutif d'un appel en direct (0012, `appels.contexte`). Texte brut dicté par l'appelant. */
+export type ContexteAppel = {
+  etape?: EtapeAppel;
+  champs: Partial<Record<CleContexte, ChampContexte>>;
+  /** Dernière mise à jour */
+  majLe?: string;
 };
 
 // ───────────────────────────────────────────────────────────── Notifications

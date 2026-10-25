@@ -9,8 +9,11 @@
 import type {
   Appel,
   Blocage,
+  CleContexte,
   Client,
   Commentaire,
+  ContexteAppel,
+  EtapeAppel,
   Evenement,
   Garage,
   Intervention,
@@ -166,6 +169,9 @@ export type LigneAppel = {
   issue: IssueAppel;
   enregistrement_url: string | null;
   intervention_id: string | null;
+  /** Contexte de l'appel en direct (0012) : forme décrite par versContexte */
+  contexte?: unknown;
+  contexte_maj_le?: string | null;
 };
 
 /** « Lue » n’est pas sur la ligne : c’est par membre, dans notifications_lues. */
@@ -367,7 +373,48 @@ export function versAppel(l: LigneAppel): Appel {
     issue: l.issue,
     enregistrementUrl: optionnel(l.enregistrement_url),
     interventionId: optionnel(l.intervention_id),
+    contexte: versContexte(l.contexte, l.contexte_maj_le),
   };
+}
+
+const ETAPES: readonly EtapeAppel[] = ['accueil', 'identification', 'vehicule', 'motif', 'reformulation', 'transfert', 'cloture'];
+
+/** Clés de `appels.contexte.champs` (snake_case, 0012) → clés de l'app. */
+const CLES_CONTEXTE: Record<string, CleContexte> = {
+  prenom: 'prenom',
+  nom: 'nom',
+  telephone_rappel: 'telephoneRappel',
+  marque: 'marque',
+  modele: 'modele',
+  immatriculation: 'immatriculation',
+  kilometrage: 'kilometrage',
+  motif: 'motif',
+};
+
+const estObjet = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * `appels.contexte` (jsonb écrit par appel_maj_contexte, 0012) → contexte de
+ * l'app. Lecture défensive : dicté par l'appelant, le texte reste brut et
+ * borné ; une forme inattendue est ignorée. Undefined si rien n'a été noté.
+ *   { version: 1, etape: { valeur }, champs: { <clé>: { valeur, niveau } }, maj: { le } }
+ */
+export function versContexte(brut: unknown, majLe?: string | null): ContexteAppel | undefined {
+  if (!estObjet(brut)) return undefined;
+  const champs: ContexteAppel['champs'] = {};
+  if (estObjet(brut.champs)) {
+    for (const [cle, champ] of Object.entries(brut.champs)) {
+      const cible = Object.prototype.hasOwnProperty.call(CLES_CONTEXTE, cle) ? CLES_CONTEXTE[cle] : undefined;
+      if (!cible || !estObjet(champ)) continue;
+      const v = champ.valeur;
+      const valeur = typeof v === 'number' && Number.isFinite(v) ? String(v) : typeof v === 'string' ? v.trim().slice(0, 500) : '';
+      if (valeur) champs[cible] = { valeur, confirme: champ.niveau !== 'declare' };
+    }
+  }
+  const valeurEtape = estObjet(brut.etape) ? brut.etape.valeur : undefined;
+  const etape = ETAPES.find((e) => e === valeurEtape);
+  if (!etape && !Object.keys(champs).length) return undefined;
+  return { etape, champs, majLe: majLe ? iso(majLe) : undefined };
 }
 
 /** `lues` : identifiants des notifications que le membre connecté a ouvertes. */

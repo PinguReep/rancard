@@ -1,13 +1,15 @@
 /**
- * Appels : ce que le réceptionniste téléphonique a traité. Appel en cours
- * en tête, fiches à valider ensuite, puis l'historique. Sans l'option, une
+ * Appels : ce que le réceptionniste téléphonique a traité. Appels en cours
+ * en tête (fiche remplie en direct), fiches à valider ensuite, puis
+ * l'historique. Un appel « en cours » depuis plus de 15 minutes rejoint
+ * l'historique (domain/appels.ts). Sans l'option, une
  * explication calme et un aperçu. Un refus du serveur (fiche déjà traitée,
  * accès insuffisant) s'affiche en avis.
  */
 
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
@@ -19,6 +21,7 @@ import { Entete } from '@/components/entete';
 import { Avis, useAvis } from '@/components/intervention/Avis';
 import { Ecran, Etiquette, Legende, Vide, impulsion, useMargeBasse } from '@/components/ui';
 import { repo } from '@/data';
+import { appelEnDirect } from '@/domain/appels';
 import type { Appel } from '@/domain/types';
 import { useControleRafraichir } from '@/hooks/use-rafraichir';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
@@ -36,15 +39,23 @@ export default function Appels() {
   const [enTraitement, setEnTraitement] = useState<string | null>(null);
   const [avis, montrerAvis] = useAvis();
 
+  // Un appel cesse d'être en direct 15 minutes après son début, même sans compte rendu de fin.
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setMaintenant(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const { enCours, aValider, historique } = useMemo(() => {
-    const enCours = appels.find((a) => a.enCours) ?? null;
+    const direct = (a: Appel) => appelEnDirect(a, maintenant);
+    const enCours = appels.filter(direct).sort((a, b) => b.debut.localeCompare(a.debut));
     const aValider = appels
-      .filter((a) => !a.enCours && a.interventionId && interventions.find((i) => i.id === a.interventionId)?.statut === 'a_valider')
+      .filter((a) => !direct(a) && a.interventionId && interventions.find((i) => i.id === a.interventionId)?.statut === 'a_valider')
       .sort((a, b) => b.debut.localeCompare(a.debut));
     const ids = new Set(aValider.map((a) => a.id));
-    const historique = appels.filter((a) => !a.enCours && !ids.has(a.id)).sort((a, b) => b.debut.localeCompare(a.debut));
+    const historique = appels.filter((a) => !direct(a) && !ids.has(a.id)).sort((a, b) => b.debut.localeCompare(a.debut));
     return { enCours, aValider, historique };
-  }, [appels, interventions]);
+  }, [appels, interventions, maintenant]);
 
   if (!p.appels) {
     return (
@@ -94,7 +105,9 @@ export default function Appels() {
   const entete = (
     <View>
       <Entete titre="Appels" sansDate />
-      {enCours ? <CarteAppelEnCours appel={enCours} /> : null}
+      {enCours.map((a) => (
+        <CarteAppelEnCours key={a.id} appel={a} />
+      ))}
       {aValider.length ? (
         <View className="mb-6 px-4">
           <Etiquette accessibilityRole="header" className="mb-2 ml-1">{`À valider · ${aValider.length}`}</Etiquette>

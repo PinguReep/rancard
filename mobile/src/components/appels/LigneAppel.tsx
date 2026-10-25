@@ -38,7 +38,7 @@ export function LigneAppel({ appel, onPress }: { appel: Appel; onPress?: () => v
         ) : null}
       </View>
       <Secondaire numberOfLines={1} className="mt-1.5">
-        {appel.resume}
+        {appel.resume || 'Aucun compte rendu reçu pour cet appel.'}
       </Secondaire>
       <View className="mt-3 flex-row flex-wrap items-center gap-2">
         <PastilleIssue issue={appel.issue} />
