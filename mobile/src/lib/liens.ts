@@ -1,5 +1,5 @@
 /**
- * Pages publiques de Rencar (site rencar.example, dossier `site/` du dépôt) et
+ * Pages publiques de Rencar (site rencar.fr, dossier `site/` du dépôt) et
  * adresse d’assistance. Les mêmes adresses figurent dans la fiche App Store
  * (`store.config.json`) : une page absente fait refuser l’app à l’examen,
  * elles doivent donc être en ligne avant tout build ou toute mise à jour qui
@@ -11,11 +11,11 @@
 
 import { Linking, Platform } from 'react-native';
 
-export const SITE = 'https://rencar.example';
+export const SITE = 'https://rencar.fr';
 export const URL_CONFIDENTIALITE = `${SITE}/confidentialite`;
 export const URL_ASSISTANCE = `${SITE}/assistance`;
 export const URL_MENTIONS_LEGALES = `${SITE}/mentions-legales`;
-export const EMAIL_ASSISTANCE = 'support@rencar.example';
+export const EMAIL_ASSISTANCE = 'support@rencar.fr';
 
 /** Ouvre une page publique de Rencar, sans jamais lever d’erreur. */
 export async function ouvrirPage(url: string): Promise<void> {

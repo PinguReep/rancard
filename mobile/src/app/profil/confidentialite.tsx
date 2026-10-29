@@ -2,7 +2,7 @@
  * Confidentialité : ce que l'app enregistre, pourquoi, où, combien de
  * temps, et les droits. Court et factuel, sans affirmation juridique : le
  * texte qui engage est la politique de confidentialité publiée sur
- * rencar.example (brouillon dans `site/confidentialite.html`), ouverte d’ici.
+ * rencar.fr (brouillon dans `site/confidentialite.html`), ouverte d’ici.
  * Les deux doivent dire la même chose : modifier l’un, relire l’autre.
  */
 

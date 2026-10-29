@@ -27,7 +27,7 @@
  *     chiffrement jamais à false avec le SDK Twilio Voice, manifeste de
  *     confidentialité sans doublon et avec les données audio ;
  *   - store.config.json : longueurs d’Apple, aucun prix, aucun espace réservé,
- *     aucun identifiant de démonstration, adresses sur rencar.example.
+ *     aucun identifiant de démonstration, adresses sur rencar.fr.
  *
  * Code de sortie 1 au premier défaut bloquant ; la clé n’est jamais affichée.
  */
@@ -112,7 +112,7 @@ if (PROFILS_DEMO.includes(profil)) {
   }
 
   const suivi = env.EXPO_PUBLIC_SUIVI_URL ?? '';
-  if (!suivi) ko('EXPO_PUBLIC_SUIVI_URL absente : l’app enverrait aux clients l’adresse par défaut https://suivi.rencar.example/suivi.');
+  if (!suivi) ko('EXPO_PUBLIC_SUIVI_URL absente : l’app enverrait aux clients l’adresse par défaut https://suivi.rencar.fr/suivi.');
   else if (!/^https:\/\/[^\s?#]+$/.test(suivi)) ko('EXPO_PUBLIC_SUIVI_URL : adresse https sans « ?t= » attendue.');
 
   if (ref) console.log(`Projet Supabase : ${ref}`);
@@ -199,7 +199,7 @@ else {
       if (/android|google play/i.test(texte)) ko(`store.config.json ${langue}.${champ} : autre plateforme citée (règle 2.3.10).`);
     }
     for (const champ of ['supportUrl', 'privacyPolicyUrl', 'marketingUrl']) {
-      if (info[champ] && !/^https:\/\/rencar\.fr(\/|$)/.test(info[champ])) ko(`store.config.json ${langue}.${champ} : adresse https://rencar.example/… attendue.`);
+      if (info[champ] && !/^https:\/\/rencar\.fr(\/|$)/.test(info[champ])) ko(`store.config.json ${langue}.${champ} : adresse https://rencar.fr/… attendue.`);
     }
     if (!info.privacyPolicyUrl) ko(`store.config.json ${langue} : privacyPolicyUrl obligatoire.`);
     if (!info.supportUrl) ko(`store.config.json ${langue} : supportUrl obligatoire.`);

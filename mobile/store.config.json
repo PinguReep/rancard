@@ -44,9 +44,9 @@
           "réceptionniste"
         ],
         "promoText": "Le planning de l’atelier, les fiches clients et véhicules et le suivi des interventions, dans le téléphone de chaque membre de l’équipe.",
-        "marketingUrl": "https://rencar.example",
-        "supportUrl": "https://rencar.example/assistance",
-        "privacyPolicyUrl": "https://rencar.example/confidentialite"
+        "marketingUrl": "https://rencar.fr",
+        "supportUrl": "https://rencar.fr/assistance",
+        "privacyPolicyUrl": "https://rencar.fr/confidentialite"
       }
     },
     "release": {

@@ -11,7 +11,7 @@ import { Platform } from 'react-native';
 import { numeroLien } from './format';
 import { salutation } from './sms';
 
-export const URL_SUIVI_BASE = (process.env.EXPO_PUBLIC_SUIVI_URL ?? 'https://suivi.rencar.example/suivi').replace(/\/+$/, '');
+export const URL_SUIVI_BASE = (process.env.EXPO_PUBLIC_SUIVI_URL ?? 'https://suivi.rencar.fr/suivi').replace(/\/+$/, '');
 
 export const lienSuivi = (token: string) => `${URL_SUIVI_BASE}?t=${encodeURIComponent(token)}`;
 
