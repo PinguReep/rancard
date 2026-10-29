@@ -11,6 +11,7 @@
         "simulator": false
       },
       "env": {
+        "APP_VARIANT": "test",
         "EXPO_PUBLIC_BACKEND": "demo"
       },
       "channel": "development"
@@ -19,13 +20,17 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
+        "APP_VARIANT": "test",
         "EXPO_PUBLIC_BACKEND": "demo"
       }
     },
     "testflight": {
       "distribution": "store",
       "channel": "testflight",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "APP_VARIANT": "test"
+      }
     },
     "preprod": {
       "distribution": "store",
@@ -33,6 +38,7 @@
       "environment": "preview",
       "autoIncrement": true,
       "env": {
+        "APP_VARIANT": "test",
         "EXPO_PUBLIC_BACKEND": "supabase"
       }
     },
@@ -42,6 +48,7 @@
       "environment": "production",
       "autoIncrement": true,
       "env": {
+        "APP_VARIANT": "production",
         "EXPO_PUBLIC_BACKEND": "supabase"
       }
     }

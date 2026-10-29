@@ -3,7 +3,9 @@
  * sonnent (avec « Décrocher » si ce téléphone sonne aussi), un membre est en
  * ligne (avec « Revenir à l'appel » si c'est sur ce téléphone), ou le passage
  * a échoué et le réceptionniste reste en ligne. En démonstration, un bouton
- * simule le passage d'un appel en cours.
+ * simule le passage d'un appel en cours, seulement dans un binaire avec la
+ * sonnerie (`sonnerieSimulee`, « Rencar Test ») : sans elle, la carte ne
+ * montre que ce que le serveur rapporte.
  */
 
 import { useRouter } from 'expo-router';

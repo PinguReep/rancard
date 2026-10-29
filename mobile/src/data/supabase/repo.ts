@@ -50,6 +50,7 @@ import {
   type Repo,
   type ResultatAnnulation,
   type Snapshot,
+  VerificationHumaineRefusee,
 } from '@/data/repo';
 import { peut, POSTES, TOUTES_PERMISSIONS } from '@/domain/permissions';
 import type {
@@ -233,6 +234,13 @@ function identifiant(): string {
  */
 type ResultatFonction<T> = { ok: true; donnees: T } | { ok: false; raison: 'absente' | 'injoignable' };
 
+/** Codes de la vérification anti-robot de la fonction `inscription` (`supabase/functions/inscription/gerer.ts`). */
+const RAISONS_VERIFICATION: Record<string, VerificationHumaineRefusee['raison']> = {
+  verification_humaine: 'refusee',
+  verification_absente: 'absente',
+  verification_indisponible: 'indisponible',
+};
+
 /** Message d’un appel de fonction qui n’a pas abouti : `absente` pour une fonction non déployée. */
 function messageEchec(r: { raison: 'absente' | 'injoignable' }, absente: string): string {
   return r.raison === 'injoignable' ? HORS_LIGNE : absente;
@@ -365,12 +373,17 @@ export class SupabaseRepo implements Repo {
     if (!e) return { ok: true, donnees: reponse.data as T };
     if (e instanceof FunctionsHttpError) {
       let message: string | null = null;
+      let code: unknown = null;
       try {
-        const corps = (await e.context.json()) as { erreur?: unknown };
+        const corps = (await e.context.json()) as { erreur?: unknown; code?: unknown };
         if (typeof corps.erreur === 'string' && corps.erreur) message = corps.erreur;
+        code = corps.code;
       } catch {
         // Corps non JSON : passerelle Supabase.
       }
+      // Vérification anti-robot (fonction `inscription`) : l'écran garde le message et relance le widget.
+      const raison = RAISONS_VERIFICATION[typeof code === 'string' ? code : ''];
+      if (raison) throw new VerificationHumaineRefusee(message ?? 'La vérification anti-robot n’a pas abouti. Réessayez.', raison);
       if (message) throw new Error(message);
       if (e.context.status === 404) {
         if (__DEV__) console.warn(`Fonction ${nom} non déployée.`);
@@ -459,6 +472,8 @@ export class SupabaseRepo implements Repo {
       prenom: n.prenom.trim(),
       nom: n.nom.trim(),
       garage: { nom: n.garage.nom.trim(), adresse: n.garage.adresse.trim(), telephone: n.garage.telephone.trim() },
+      // Jeton Turnstile, validé par Cloudflare avant tout effet (403 `verification_humaine` sinon).
+      ...(n.verification ? { turnstile: n.verification } : {}),
     });
     if (!r.ok) throw new Error(messageEchec(r, 'La création de compte n’est pas encore ouverte. Réessayez plus tard.'));
     return { codeEnvoye: r.donnees?.codeEnvoye !== false };

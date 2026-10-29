@@ -14,6 +14,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { GestionnaireAppels } from '@/components/sonnerie/GestionnaireAppels';
 import { noterAppui } from '@/components/ui/dernier-appui';
+import { SONNERIE_INCLUSE } from '@/lib/sonnerie/inclusion';
 import { useSession } from '@/state/session';
 import { palette } from '@/theme/tokens';
 
@@ -113,7 +114,8 @@ export default function RootLayout() {
               <Stack.Screen name="(auth)" />
             </Stack.Protected>
           </Stack>
-          {session ? <GestionnaireAppels /> : null}
+          {/* Sonnerie dans l’app : « Rencar Test » seulement (absente de la version 1 de l’App Store). */}
+          {session && SONNERIE_INCLUSE ? <GestionnaireAppels /> : null}
         </ThemeProvider>
       </KeyboardProvider>
     </GestureHandlerRootView>

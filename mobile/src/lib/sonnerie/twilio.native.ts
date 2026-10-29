@@ -11,18 +11,23 @@
  *   système, écran verrouillé). L'écran d'appel affiche le paramètre
  *   `DisplayName` du TwiML (prénom et véhicule) ; l'app relie l'appel à sa
  *   ligne `appels` par le paramètre `appel`.
- * - Le module est chargé à la demande et protégé : un binaire sans le module
- *   natif (ancien build, Expo Go) n'a simplement pas de sonnerie.
+ * - Le module est chargé à la demande et protégé : jamais dans « Rencar »
+ *   (App Store, version 1), dont le binaire ne contient pas le module natif
+ *   (`extra.sonnerie` faux, `inclusion.ts`) ; un binaire de test sans le
+ *   module natif (ancien build, Expo Go) n'a simplement pas de sonnerie. Le
+ *   JavaScript du SDK lève dès son chargement s'il ne trouve pas son module
+ *   natif : d'où les deux gardes avant le `require`.
  *
  * Android viendra plus tard (Firebase Cloud Messaging, google-services.json) :
  * aucun moteur sur Android aujourd'hui.
  */
 
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 
 import type { AudioDevice, Call, CallInvite, CallKit, Voice } from '@twilio/voice-react-native-sdk';
 
 import { majActif, majTelephone, useTelephone, type AppelEntrant, type EtatLigne } from './etat';
+import { SONNERIE_INCLUSE } from './inclusion';
 import { NOM_ESSAI, type Moteur } from './moteur';
 
 type Sdk = typeof import('@twilio/voice-react-native-sdk');
@@ -37,8 +42,13 @@ let appel: Call | null = null;
 let hautParleurActif = false;
 
 function charger(): Sdk | null {
-  if (Platform.OS !== 'ios') return null;
+  if (Platform.OS !== 'ios' || !SONNERIE_INCLUSE) return null;
   if (sdk !== undefined) return sdk;
+  if (!NativeModules.TwilioVoiceReactNative) {
+    // Binaire sans le module natif : le SDK lèverait dès son chargement.
+    sdk = null;
+    return sdk;
+  }
   try {
     sdk = require('@twilio/voice-react-native-sdk') as Sdk;
   } catch {

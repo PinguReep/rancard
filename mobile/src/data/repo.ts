@@ -43,6 +43,8 @@ export type NouvelleInscription = {
   prenom: string;
   nom: string;
   garage: { nom: string; adresse: string; telephone: string };
+  /** Jeton de la vérification anti-robot (Cloudflare Turnstile) ; absent en démonstration. */
+  verification?: string;
 };
 
 /**
@@ -53,6 +55,21 @@ export class AdresseNonConfirmee extends Error {
   constructor(readonly email: string) {
     super('Cette adresse n’a pas encore été confirmée.');
     this.name = 'AdresseNonConfirmee';
+  }
+}
+
+/**
+ * Inscription arrêtée par la vérification anti-robot de la fonction
+ * `inscription` : jeton refusé (`refusee`), absent (`absente`, envoi sans
+ * jeton) ou vérification injoignable (`indisponible`). L'écran garde le
+ * message jusqu'au geste suivant et propose « Réessayer ».
+ */
+export class VerificationHumaineRefusee extends Error {
+  readonly raison: 'refusee' | 'absente' | 'indisponible';
+  constructor(message: string, raison: 'refusee' | 'absente' | 'indisponible' = 'refusee') {
+    super(message);
+    this.name = 'VerificationHumaineRefusee';
+    this.raison = raison;
   }
 }
 

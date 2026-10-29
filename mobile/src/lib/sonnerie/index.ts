@@ -3,6 +3,10 @@
  * quand le réceptionniste passe un appel à l'équipe, et le premier qui
  * décroche parle au client.
  *
+ * Seulement dans « Rencar Test » (`SONNERIE_INCLUSE`, `inclusion.ts`) : dans
+ * « Rencar » (App Store, version 1), aucun moteur, pas même le simulateur, et
+ * les écrans ne montrent aucune entrée de la sonnerie.
+ *
  * Moteur : simulateur en démonstration (web et téléphone, aucun serveur),
  * Twilio Voice sur iPhone en mode supabase, aucun ailleurs (navigateur,
  * Android pour l'instant). Le réglage « Recevoir les appels » de chaque
@@ -26,12 +30,14 @@ import type { Appel } from '@/domain/types';
 
 import { identifiantAppareil } from './appareil';
 import { majTelephone, useTelephone } from './etat';
+import { SONNERIE_INCLUSE } from './inclusion';
 import type { Moteur } from './moteur';
 import { membreDuSimulateur, simulateur, simulerEssai, simulerPassage } from './simulateur';
 import { moteurTwilio } from './twilio';
 
 export { useTelephone } from './etat';
 export type { AppelActif, AppelEntrant, EtatLigne, Inscription } from './etat';
+export { SONNERIE_INCLUSE } from './inclusion';
 export { NOM_ESSAI } from './moteur';
 
 const CLE_TRACE = 'rencar.sonnerie.inscription.v1';
@@ -39,14 +45,18 @@ const REINSCRIPTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const MESSAGE_MICRO_REFUSE = 'Le micro est refusé : autorisez-le dans les réglages du téléphone pour prendre les appels.';
 
-/** Moteur du backend en cours (le simulateur en démonstration, même dans un build supabase). */
+/**
+ * Moteur du backend en cours (le simulateur en démonstration, même dans un build supabase) ;
+ * aucun dans un binaire sans la sonnerie (« Rencar », App Store, version 1).
+ */
 export function moteurCourant(): Moteur | null {
+  if (!SONNERIE_INCLUSE) return null;
   return BACKEND === 'demo' ? simulateur : moteurTwilio();
 }
 
 /** true en démonstration : les appels sont simulés sur ce téléphone. */
 export function sonnerieSimulee(): boolean {
-  return BACKEND === 'demo';
+  return SONNERIE_INCLUSE && BACKEND === 'demo';
 }
 
 /** Pourquoi ce téléphone ne peut pas sonner (null s'il le peut). */

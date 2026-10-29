@@ -22,6 +22,7 @@ import { Segments } from '@/components/ui/segments';
 import { BACKEND, repo, type Repo } from '@/data';
 import { estGerant } from '@/domain/permissions';
 import { NON_INCLUS } from '@/domain/prestations';
+import { SONNERIE_INCLUSE } from '@/lib/sonnerie/inclusion';
 import { useDonnees, usePermissions, useSession } from '@/state/session';
 import { useApparence, type ChoixApparence } from '@/theme/apparence';
 
@@ -108,7 +109,9 @@ export default function Profil() {
           <LignePush membreId={membre.id} derniere />
         </Groupe>
 
-        {p.appels ? (
+        {/* Sonnerie dans l’app : « Rencar Test » seulement ; dans l’app de l’App Store (version 1),
+            le groupe disparaît, sans mention d’une fonction à venir (règle 2.1). */}
+        {p.appels && SONNERIE_INCLUSE ? (
           <Groupe titre="Appels">
             {receptionniste ? (
               <LigneSonnerie membreId={membre.id} />

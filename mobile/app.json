@@ -18,7 +18,8 @@
         ],
         "NSCameraUsageDescription": "Pour photographier ou filmer le véhicule et joindre l’image à l’intervention.",
         "NSPhotoLibraryUsageDescription": "Pour joindre à l’intervention une photo ou une vidéo du véhicule déjà enregistrée sur ce téléphone.",
-        "NSMicrophoneUsageDescription": "Pour prendre dans l’app les appels des clients que le réceptionniste passe à l’équipe, et pour enregistrer une vidéo du véhicule avec le son."
+        "NSMicrophoneUsageDescription": "Pour enregistrer le son des vidéos du véhicule que vous joignez à l’intervention.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "entitlements": {
         "aps-environment": "production"
@@ -206,16 +207,9 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Pour prendre dans l’app les appels des clients que le réceptionniste passe à l’équipe, et pour enregistrer une vidéo du véhicule avec le son.",
+          "microphonePermission": "Pour enregistrer le son des vidéos du véhicule que vous joignez à l’intervention.",
           "enableBackgroundPlayback": true,
           "enableBackgroundRecording": false
-        }
-      ],
-      [
-        "@twilio/voice-react-native-sdk",
-        {
-          "apsEnvironment": "production",
-          "microphoneUsageDescription": "Pour prendre dans l’app les appels des clients que le réceptionniste passe à l’équipe, et pour enregistrer une vidéo du véhicule avec le son."
         }
       ],
       "expo-asset"
@@ -225,7 +219,8 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "sonnerie": false
     },
     "runtimeVersion": {
       "policy": "fingerprint"
