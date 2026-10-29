@@ -13,6 +13,7 @@ import { dureeSecondes, formaterTelephone, quand } from '@/lib/format';
 import { useTheme } from '@/theme/tokens';
 
 import { PastilleHorsHoraires, PastilleIssue } from './PastilleIssue';
+import { PastilleTransfert } from './PastilleTransfert';
 
 export function LigneAppel({ appel, onPress }: { appel: Appel; onPress?: () => void }) {
   const t = useTheme();
@@ -42,6 +43,7 @@ export function LigneAppel({ appel, onPress }: { appel: Appel; onPress?: () => v
       </Secondaire>
       <View className="mt-3 flex-row flex-wrap items-center gap-2">
         <PastilleIssue issue={appel.issue} />
+        <PastilleTransfert appel={appel} />
         {appel.horsHoraires ? <PastilleHorsHoraires /> : null}
       </View>
     </Carte>

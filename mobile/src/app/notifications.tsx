@@ -55,6 +55,28 @@ export default function Notifications() {
 
   const nonLues = liste.filter((n) => !n.lue).length;
 
+  /**
+   * « Tout marquer lu » ne touche que ce que le membre voit. En une seule
+   * écriture quand toutes ses non lues (les siennes et celles du garage)
+   * sont visibles ; sinon une par une : en démo, la lecture d’une
+   * notification du garage vaut pour tous, et un mécanicien ne doit pas
+   * vider la cloche du comptoir avec des fiches qu’il ne voit pas.
+   */
+  async function toutLire() {
+    const visibles = new Set(liste.map((n) => n.id));
+    const aLire = liste.filter((n) => !n.lue);
+    const cachees = notifications.some((n) => !n.lue && (n.membreId === null || n.membreId === membre.id) && !visibles.has(n.id));
+    try {
+      if (!cachees) {
+        await repo().toutMarquerLu(membre.id);
+        return;
+      }
+      for (const n of aLire) await repo().marquerLue(n.id);
+    } catch {
+      // Confort : la pastille reviendra au prochain chargement.
+    }
+  }
+
   function fermer() {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)/planning');
@@ -70,9 +92,17 @@ export default function Notifications() {
 
   return (
     <Ecran sansHaut={Platform.OS === 'ios'}>
-      <EnteteFeuille titre="Notifications" nonLues={nonLues} onToutLire={() => repo().toutMarquerLu(membre.id).catch(() => {})} onFermer={fermer} />
+      <EnteteFeuille titre="Notifications" nonLues={nonLues} onToutLire={() => void toutLire()} onFermer={fermer} />
       {rangees.length === 0 ? (
-        <Vide icone="cloche" titre="Rien de nouveau" texte="Les rendez-vous du site, les fiches du réceptionniste et les accords clients arrivent ici." />
+        <Vide
+          icone="cloche"
+          titre="Rien de nouveau"
+          texte={
+            p.voirTout
+              ? 'Les rendez-vous du site, les fiches du réceptionniste et les relais de l’équipe (pièces, accords, voitures confiées) arrivent ici.'
+              : 'Les voitures qui vous sont confiées, les pièces reçues et les accords des clients arrivent ici.'
+          }
+        />
       ) : (
         <FlashList
           data={rangees}

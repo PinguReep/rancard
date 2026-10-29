@@ -13,7 +13,7 @@ module.exports = {
         line: { DEFAULT: '#e5e5ea', dark: '#232a35' },
         ink: { DEFAULT: '#111114', dark: '#eef1f6' },
         muted: { DEFAULT: '#606068', soft: '#f0f0f3', dark: '#8b94a5', softdark: '#1a1f29' },
-        faint: { DEFAULT: '#a0a0a8', dark: '#5b6474' },
+        faint: { DEFAULT: '#6b6b73', dark: '#7f8899' },
         // `accent` = texte et liens ; `accent-fond` = fond des boutons pleins en sombre (blanc dessus ≥ 4,5:1)
         accent: { DEFAULT: '#2559e0', soft: '#e8efff', dark: '#6a9bff', softdark: '#14203a', fond: '#3568f5' },
         danger: { DEFAULT: '#c31e2a', soft: '#fdecee', dark: '#ff5b61', softdark: '#34151a' },

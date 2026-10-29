@@ -1,17 +1,25 @@
 /**
- * Fiche d'un appel traité par le réceptionniste : qui a appelé, quand,
- * le résumé automatique, la fiche créée s'il y en a une, et deux gestes :
- * rappeler, ou créer une intervention. Réservée à la permission
+ * Fiche d'un appel traité par le réceptionniste : qui a appelé, quand, ce
+ * que l'appelant a donné (nom, véhicule, plaque, kilométrage, motif, noté
+ * pendant l'appel), le résumé automatique, la fiche créée s'il y en a une,
+ * puis la conversation à réécouter (lecteur et fil des répliques, gardés
+ * 90 jours), et deux gestes : rappeler, puis créer une intervention
+ * préremplie (ou ouvrir celle qui existe déjà). Réservée à la permission
  * « Voir les appels », comme l'onglet.
  */
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Linking, Platform, Pressable, View } from 'react-native';
 
+import { donneesAppelant } from '@/components/appels/donnees-appelant';
+import { EcouteAppel } from '@/components/appels/EcouteAppel';
+import { InfosAppelant, aDesInfos } from '@/components/appels/InfosAppelant';
 import { PastilleHorsHoraires, PastilleIssue } from '@/components/appels/PastilleIssue';
+import { normaliser } from '@/components/clients/outils';
+import { appelEnDirect } from '@/domain/appels';
 import { Bouton, Carte, Ecran, Icone, Legende, Mono, PastilleStatut, Secondaire, Section, Texte, Titre, Vide, impulsion } from '@/components/ui';
-import { dureeSecondes, formaterTelephone, quand, telHref } from '@/lib/format';
-import { useDonnees, usePermissions } from '@/state/session';
+import { dureeSecondes, formaterTelephone, nomClient, quand, telHref } from '@/lib/format';
+import { useDonnees, useMembre, usePermissions } from '@/state/session';
 import { useTheme } from '@/theme/tokens';
 
 /** Même en-tête natif que la fiche intervention, déclaré ici tant que la route n'est pas dans app/_layout.tsx. */
@@ -34,8 +42,14 @@ export default function FicheAppel() {
   const router = useRouter();
   const t = useTheme();
   const p = usePermissions();
+  const membre = useMembre();
   const appel = useDonnees((s) => s.appels.find((a) => a.id === id));
-  const intervention = useDonnees((s) => (appel?.interventionId ? s.interventions.find((i) => i.id === appel.interventionId) : undefined));
+  const garage = useDonnees((s) => s.garage);
+  // Même règle que la fiche intervention : sans « voir tout », seulement les siennes.
+  const intervention = useDonnees((s) => {
+    const i = appel?.interventionId ? s.interventions.find((x) => x.id === appel.interventionId) : undefined;
+    return i && (p.voirTout || i.membreId === membre.id) ? i : undefined;
+  });
   const client = useDonnees((s) => (intervention ? s.clients.find((c) => c.id === intervention.clientId) : undefined));
   const vehicule = useDonnees((s) => (intervention ? s.vehicules.find((v) => v.id === intervention.vehiculeId) : undefined));
 
@@ -74,12 +88,22 @@ export default function FicheAppel() {
   }
 
   const telephone = formaterTelephone(appel.numero);
-  const appeler = () => {
+  const appelerNumero = (numero: string) => {
     impulsion('moyen');
-    Linking.openURL(telHref(appel.numero)).catch(() => {
+    Linking.openURL(telHref(numero)).catch(() => {
       // pas d'application téléphone disponible
     });
   };
+  const appeler = () => appelerNumero(appel.numero);
+
+  // Ce que l'appelant a donné pendant l'appel. Le nom dicté sert de titre faute de nom
+  // retenu en fin d'appel ; il est repris dans la liste s'il en diffère ou reste à confirmer.
+  const donnees = donneesAppelant(appel);
+  const nom = appel.appelant || donnees.identite?.texte;
+  const nomDansLaListe = Boolean(
+    donnees.identite &&
+      (!donnees.identite.confirme || (appel.appelant && normaliser(appel.appelant) !== normaliser(donnees.identite.texte))),
+  );
 
   const numero = (
     <Pressable
@@ -87,7 +111,7 @@ export default function FicheAppel() {
       accessibilityLabel={`Appeler le ${telephone}`}
       onPress={appeler}
       className="min-h-[44px] justify-center self-start active:opacity-70">
-      {appel.appelant ? (
+      {nom ? (
         <Texte ton="accent" className="mt-1">
           {telephone}
         </Texte>
@@ -107,27 +131,46 @@ export default function FicheAppel() {
             {appel.horsHoraires ? <PastilleHorsHoraires /> : null}
           </View>
 
-          {appel.appelant ? <Titre>{appel.appelant}</Titre> : null}
+          {nom ? <Titre>{nom}</Titre> : null}
           {numero}
           <Legende className="mt-2">
             {quand(appel.debut)} · {dureeSecondes(appel.dureeSec)}
           </Legende>
 
-          {/* Pas de bouton « Réécouter » tant que la lecture n’existe pas : rappeler vient juste sous le numéro. */}
+          {/* Une action principale : rappeler, juste sous le numéro. La réécoute est en bas, avec le fil. */}
           <View className="mt-6 gap-2">
             <Bouton onPress={appeler} icone={<Icone nom="telephone" taille={18} couleur={t.blanc} />}>
               Rappeler
             </Bouton>
-            {!intervention && p.creer ? (
+            {appel.interventionId ? (
+              // Une fiche existe déjà (réceptionniste ou collègue) : on l'ouvre, on n'en crée pas une seconde.
+              intervention ? (
+                <Bouton variante="secondaire" onPress={() => router.push(`/intervention/${intervention.id}`)}>
+                  Ouvrir la fiche
+                </Bouton>
+              ) : (
+                <Legende className="mt-1 text-center">Une fiche a déjà été créée pour cet appel.</Legende>
+              )
+            ) : p.creer ? (
               <Bouton
                 variante="secondaire"
-                onPress={() => router.push({ pathname: '/nouvelle-intervention', params: { telephone: appel.numero, appelId: appel.id } })}>
+                onPress={() => router.push({ pathname: '/nouvelle-intervention', params: { appelId: appel.id } })}>
                 Créer une intervention
               </Bouton>
             ) : null}
           </View>
 
-          <Section titre="Résumé automatique" className="mt-8">
+          <Section titre="Ce que l’appelant a donné" className="mt-8">
+            <Carte className="p-4">
+              {aDesInfos(donnees, nomDansLaListe) ? (
+                <InfosAppelant donnees={donnees} avecIdentite={nomDansLaListe} onAppelerRappel={appelerNumero} />
+              ) : (
+                <Secondaire>Aucune information notée pendant l’appel.</Secondaire>
+              )}
+            </Carte>
+          </Section>
+
+          <Section titre="Résumé automatique">
             <Carte className="p-4">
               {appel.resume ? <Texte>{appel.resume}</Texte> : <Secondaire>Aucun compte rendu reçu pour cet appel.</Secondaire>}
             </Carte>
@@ -148,7 +191,7 @@ export default function FicheAppel() {
                       {intervention.prestation}
                     </Texte>
                     <Legende numberOfLines={1}>
-                      {[client ? `${client.prenom} ${client.nom}` : null, vehicule ? `${vehicule.marque} ${vehicule.modele}` : null]
+                      {[client ? nomClient(client) : null, vehicule ? `${vehicule.marque} ${vehicule.modele}` : null]
                         .filter(Boolean)
                         .join(' · ')}
                     </Legende>
@@ -163,6 +206,13 @@ export default function FicheAppel() {
               </Carte>
             </Section>
           ) : null}
+
+          {/* En dernier : le fil peut être long. Rien pour un appel encore en direct (carte de l’onglet). */}
+          {appelEnDirect(appel) ? null : (
+            <Section titre="Conversation">
+              <EcouteAppel appel={appel} garage={garage.nom} receptionnisteActif={garage.options.receptionniste} />
+            </Section>
+          )}
         </View>
       </Ecran>
     </>

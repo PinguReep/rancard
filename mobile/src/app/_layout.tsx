@@ -1,3 +1,4 @@
+import '@/lib/sonnerie/demarrage';
 import '@/global.css';
 import '@/theme/interop';
 import '@/lib/push';
@@ -11,6 +12,8 @@ import { ActivityIndicator, Platform, View, useColorScheme } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 
+import { GestionnaireAppels } from '@/components/sonnerie/GestionnaireAppels';
+import { noterAppui } from '@/components/ui/dernier-appui';
 import { useSession } from '@/state/session';
 import { palette } from '@/theme/tokens';
 
@@ -19,12 +22,14 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 /**
  * Racine : thème, gestes, clavier, garde d'authentification.
  *
- * Les écrans « app » ne sont montés qu'avec une session ; les écrans
- * « auth » seulement sans. Expo Router gère la redirection.
+ * Les écrans « app » ne sont montés qu'avec une session ; l'écran
+ * d'attente seulement pour une demande d'inscription pas encore validée ;
+ * les écrans « auth » sinon. Expo Router gère la redirection.
  */
 export default function RootLayout() {
   const scheme = useColorScheme();
   const session = useSession((s) => s.session);
+  const enAttente = useSession((s) => s.demande !== null);
   const demarrer = useSession((s) => s.demarrer);
 
   useEffect(() => {
@@ -61,7 +66,8 @@ export default function RootLayout() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    // Chaque appui remonte ici : un avis à bouton se pose loin du doigt (components/ui/dernier-appui.ts ; web : pointerdown).
+    <GestureHandlerRootView style={{ flex: 1 }} onTouchStart={Platform.OS === 'web' ? undefined : (e) => noterAppui(e.nativeEvent.pageY)}>
       <KeyboardProvider>
         <ThemeProvider value={theme}>
           <StatusBar style={sombre ? 'light' : 'dark'} />
@@ -97,11 +103,17 @@ export default function RootLayout() {
               />
               <Stack.Screen name="nouvelle-intervention" options={{ presentation: 'modal', headerShown: false }} />
               <Stack.Screen name="profil" options={{ presentation: 'modal', headerShown: false }} />
+              <Stack.Screen name="ecran-appel" options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }} />
             </Stack.Protected>
-            <Stack.Protected guard={session === null}>
+            {/* Compte créé dans l’app, pas encore validé par Rencar : rien d’autre que l’attente. */}
+            <Stack.Protected guard={session === null && enAttente}>
+              <Stack.Screen name="attente" />
+            </Stack.Protected>
+            <Stack.Protected guard={session === null && !enAttente}>
               <Stack.Screen name="(auth)" />
             </Stack.Protected>
           </Stack>
+          {session ? <GestionnaireAppels /> : null}
         </ThemeProvider>
       </KeyboardProvider>
     </GestureHandlerRootView>

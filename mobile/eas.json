@@ -26,10 +26,34 @@
       "distribution": "store",
       "channel": "testflight",
       "autoIncrement": true
+    },
+    "preprod": {
+      "distribution": "store",
+      "channel": "preprod",
+      "environment": "preview",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND": "supabase"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "environment": "production",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND": "supabase"
+      }
     }
   },
   "submit": {
     "testflight": {
+      "ios": {}
+    },
+    "preprod": {
+      "ios": {}
+    },
+    "production": {
       "ios": {}
     }
   }

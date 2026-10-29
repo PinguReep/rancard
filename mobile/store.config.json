@@ -1,0 +1,61 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "version": "1.0.0",
+    "copyright": "2026 Rencar",
+    "categories": [
+      "BUSINESS",
+      "PRODUCTIVITY"
+    ],
+    "advisory": {
+      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+      "contests": "NONE",
+      "gambling": false,
+      "gamblingSimulated": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "kidsAgeBand": null,
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "unrestrictedWebAccess": false,
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "ageRatingOverride": "NONE",
+      "koreaAgeRatingOverride": "NONE"
+    },
+    "info": {
+      "fr-FR": {
+        "title": "Rencar",
+        "subtitle": "Planning et suivi d’atelier",
+        "description": "Rencar est l’application d’atelier des garages automobiles. Le planning, les fiches clients et véhicules, le suivi des interventions et les appels du garage tiennent dans le téléphone de chaque membre de l’équipe.\n\nPLANNING\n• Les interventions du jour, par mécanicien, avec leur état : à valider, à l’atelier, prêtes, livrées.\n• Les priorités et les blocages d’un coup d’œil : attente pièce, attente accord, client à rappeler.\n• Une action principale par fiche : le geste suivant est toujours évident.\n\nCLIENTS ET VÉHICULES\n• Recherche par plaque, par nom ou par téléphone.\n• Fiche client avec ses véhicules, l’historique des interventions et un mémo pour l’équipe.\n• Nouvelle intervention au comptoir en trois étapes.\n\nSUIVI DES INTERVENTIONS\n• Commentaires signés, mémo interne ou note visible client, photos et vidéos du véhicule.\n• Lien de suivi à envoyer au client : il voit l’avancement de son véhicule sur une page web, sans installer d’application.\n\nÉQUIPE\n• Deux rôles, gérant et employé, et des accès réglables par le gérant : un mécanicien peut ne voir que ses interventions, sans les montants.\n• Notifications sur le téléphone quand une demande arrive ou qu’une fiche demande votre attention.\n\nAPPELS, SELON L’OFFRE DU GARAGE\n• Avec le réceptionniste téléphonique de Rencar, chaque appel arrive dans l’onglet Appels avec son résumé, et les demandes de rendez-vous deviennent des fiches à valider.\n\nPOUR QUI\nRencar s’adresse aux garages qui travaillent avec Rencar. On y accède avec le compte du garage : invitation du gérant, ou inscription du garage dans l’app, validée par l’équipe Rencar.\n\nESSAYER SANS COMPTE\n« Essayer avec le garage de démonstration » ouvre un garage fictif qui reste entièrement sur le téléphone.\n\nCONFIDENTIALITÉ\nLes données des garages sont hébergées dans l’Union européenne. Aucune publicité, aucun pistage.",
+        "keywords": [
+          "garage",
+          "mécanicien",
+          "réparation",
+          "entretien",
+          "automobile",
+          "véhicule",
+          "rendez-vous",
+          "plaque",
+          "CRM",
+          "réceptionniste"
+        ],
+        "promoText": "Le planning de l’atelier, les fiches clients et véhicules et le suivi des interventions, dans le téléphone de chaque membre de l’équipe.",
+        "marketingUrl": "https://rencar.example",
+        "supportUrl": "https://rencar.example/assistance",
+        "privacyPolicyUrl": "https://rencar.example/confidentialite"
+      }
+    },
+    "release": {
+      "automaticRelease": false,
+      "phasedRelease": false
+    },
+    "review": {
+      "demoRequired": true,
+      "notes": "Rencar is a free companion app for independent car repair shops in France that work with Rencar. Rencar sells its services (shop website with online booking, SMS reminders, AI phone receptionist) directly to the businesses, outside the app, under a business contract (guideline 3.1.3(c), Enterprise Services). The app contains no purchase, no price and no link or call to action to buy anything. A service the shop has not subscribed to is shown as \"Non inclus dans l'offre de votre garage.\" (not included in your shop's plan), without any purchase path.\n\nHOW TO REVIEW\n1. Demo account (fields above): manager (\"gérant\") of a fictional shop on the production server, with sample jobs, customers and vehicles. It shows team management, account deletion and incoming calls (the shop has the AI phone receptionist; text messages to customers are turned off). The shop has a second manager, so the review account can be deleted.\n2. Without an account: on the sign-in screen, \"Essayer avec le garage de démonstration\" opens a fictional shop stored only on the device (no server, calls simulated). It is provided in addition to the demo account, not instead of it.\n\nINCOMING CALLS (VoIP: PushKit, CallKit, Twilio Voice)\n- The AI receptionist answers the shop's phone line. When a caller asks to speak to someone, it passes the call to the team: the iPhones of the members who turned on \"Recevoir les appels\" ring as a regular incoming call (CallKit), also when locked; the first one to answer talks to the customer. This is the only use of the voip background mode.\n- To try it with the demo account: tap the avatar at the top right (Profil) > Appels > \"Recevoir les appels\" (the app asks for the microphone), then \"Tester la sonnerie\": within a few seconds the iPhone rings with a short recorded message. The attached video shows a call received on a locked iPhone.\n- The audio background mode keeps a call recording playing when the screen locks (Calls tab > a call > play).\n\nACCOUNT CREATION AND DELETION\n- Shops are created by Rencar, or sign up in the app; a new sign-up stays pending until Rencar has checked the business, to protect the shops' customer data. Employees join by an invitation code sent by their manager.\n- Account deletion: tap the avatar at the top right (Profil et réglages) > Mon compte > Supprimer mon compte > Continuer > type SUPPRIMER > Supprimer définitivement. The account and its personal data are deleted at once; the shop's business records stay with the shop, attributed to \"Ancien membre\". When the account is the shop's only manager, the same steps delete the shop and all its data too, after saying what will be lost.\n\nPERMISSIONS\n- Microphone: incoming calls taken in the app (see INCOMING CALLS), and the sound of a vehicle video.\n- Camera, photo library: on a job sheet, the \"Photo\" button attaches a photo or a video of the vehicle to the job.\n- Notifications: Profil > \"Notifications sur ce téléphone\". Never requested at launch.\n\nOTHER\n- The app is in French only. Dark appearance by default; Light or Auto can be chosen in Profil.\n- Calls tab: the AI phone receptionist answers the shop's phone line (outside the app); the app shows the call summaries and recordings and turns booking requests into jobs to confirm.\n- Text messages to customers are sent by Rencar only for shops that chose this service; it is turned off for the review account, so that no message goes to a fictional number."
+    }
+  }
+}

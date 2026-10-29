@@ -1,0 +1,31 @@
+{
+  "a1": {
+    "audio": true,
+    "repliques": [
+      { "role": "agent", "t": 0, "texte": "Bonjour, Garage de démonstration. Je suis l’assistant vocal du garage, une intelligence artificielle, et l’appel est enregistré. Que puis-je faire pour vous ?" },
+      { "role": "appelant", "t": 9, "texte": "Bonjour, ma batterie était à plat ce matin, j’ai dû redémarrer avec des pinces." },
+      { "role": "agent", "t": 15, "texte": "D’accord, je note une demande de test de charge. C’est à quel nom, s’il vous plaît ?" },
+      { "role": "appelant", "t": 21, "texte": "Nicolas Fabre." },
+      { "role": "agent", "t": 23, "texte": "Merci, monsieur Fabre. Quel est votre véhicule ?" },
+      { "role": "appelant", "t": 27, "texte": "Une Dacia Sandero, immatriculée AA-007-AA." },
+      { "role": "agent", "t": 32, "texte": "Le numéro qui s’affiche est-il le bon pour vous rappeler ?" },
+      { "role": "appelant", "t": 37, "texte": "Oui, c’est bien celui-là." },
+      { "role": "agent", "t": 40, "texte": "Le garage peut vous recevoir demain à 8 h 30 pour le test de charge. Cela vous convient-il ?" },
+      { "role": "appelant", "t": 47, "texte": "Parfait, demain 8 h 30." },
+      { "role": "agent", "t": 50, "texte": "C’est noté : test de charge de la batterie, demain à 8 h 30. L’équipe vous confirme le rendez-vous. Bonne journée !" },
+      { "role": "appelant", "t": 59, "texte": "Merci, au revoir." }
+    ]
+  },
+  "a5": {
+    "audio": false,
+    "repliques": [
+      { "role": "agent", "t": 0, "texte": "Bonjour, Garage de démonstration. Je suis l’assistant vocal du garage, une intelligence artificielle, et l’appel est enregistré. Que puis-je faire pour vous ?" },
+      { "role": "appelant", "t": 9, "texte": "Bonjour, mes pneus avant sont usés, je voudrais un devis pour deux pneus et la géométrie." },
+      { "role": "agent", "t": 16, "texte": "Très bien. C’est à quel nom, et pour quel véhicule ?" },
+      { "role": "appelant", "t": 21, "texte": "Hugo Bertin, une Renault Mégane, AA-006-AA. Elle a à peu près 143 000 kilomètres." },
+      { "role": "agent", "t": 30, "texte": "Merci. Je ne peux pas vous donner de prix moi-même : je note votre demande et l’équipe vous rappelle avec le devis." },
+      { "role": "appelant", "t": 39, "texte": "D’accord, merci." },
+      { "role": "agent", "t": 42, "texte": "C’est noté, monsieur Bertin. Bonne journée !" }
+    ]
+  }
+}

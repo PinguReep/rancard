@@ -2,23 +2,30 @@
   "expo": {
     "name": "Rencar",
     "slug": "atelier",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "rencar",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.example.rencar",
       "supportsTablet": false,
       "infoPlist": {
         "CFBundleDisplayName": "Rencar",
-        "NSCameraUsageDescription": "Pour photographier le véhicule et l'ajouter au suivi du client.",
-        "NSPhotoLibraryUsageDescription": "Pour joindre une photo ou une vidéo du véhicule au suivi du client.",
-        "NSMicrophoneUsageDescription": "Pour enregistrer une vidéo du véhicule avec le son.",
-        "ITSAppUsesNonExemptEncryption": false
+        "CFBundleDevelopmentRegion": "fr",
+        "CFBundleLocalizations": [
+          "fr"
+        ],
+        "NSCameraUsageDescription": "Pour photographier ou filmer le véhicule et joindre l’image à l’intervention.",
+        "NSPhotoLibraryUsageDescription": "Pour joindre à l’intervention une photo ou une vidéo du véhicule déjà enregistrée sur ce téléphone.",
+        "NSMicrophoneUsageDescription": "Pour prendre dans l’app les appels des clients que le réceptionniste passe à l’équipe, et pour enregistrer une vidéo du véhicule avec le son."
+      },
+      "entitlements": {
+        "aps-environment": "production"
       },
       "privacyManifests": {
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": [],
         "NSPrivacyAccessedAPITypes": [
           {
             "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
@@ -27,9 +34,123 @@
             ]
           },
           {
-            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
             "NSPrivacyAccessedAPITypeReasons": [
-              "CA92.1"
+              "C617.1",
+              "0A2A.1",
+              "3B52.1"
+            ]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "E174.1",
+              "85F4.1"
+            ]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "35F9.1"
+            ]
+          }
+        ],
+        "NSPrivacyCollectedDataTypes": [
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeName",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeEmailAddress",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypePhoneNumber",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypePhysicalAddress",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypePhotosorVideos",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeAudioData",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeEmailsOrTextMessages",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeOtherUserContent",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeUserID",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeDeviceID",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeProductInteraction",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAnalytics"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeOtherDiagnosticData",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality",
+              "NSPrivacyCollectedDataTypePurposeAnalytics"
             ]
           }
         ]
@@ -45,7 +166,6 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.RECORD_AUDIO",
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -55,7 +175,12 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -74,10 +199,26 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Pour joindre une photo ou une vidéo du véhicule au suivi du client.",
-          "cameraPermission": "Pour photographier le véhicule et l'ajouter au suivi du client."
+          "photosPermission": "Pour joindre à l’intervention une photo ou une vidéo du véhicule déjà enregistrée sur ce téléphone.",
+          "cameraPermission": "Pour photographier ou filmer le véhicule et joindre l’image à l’intervention."
         }
-      ]
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Pour prendre dans l’app les appels des clients que le réceptionniste passe à l’équipe, et pour enregistrer une vidéo du véhicule avec le son.",
+          "enableBackgroundPlayback": true,
+          "enableBackgroundRecording": false
+        }
+      ],
+      [
+        "@twilio/voice-react-native-sdk",
+        {
+          "apsEnvironment": "production",
+          "microphoneUsageDescription": "Pour prendre dans l’app les appels des clients que le réceptionniste passe à l’équipe, et pour enregistrer une vidéo du véhicule avec le son."
+        }
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -87,7 +228,7 @@
       "router": {}
     },
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "fingerprint"
     }
   }
 }

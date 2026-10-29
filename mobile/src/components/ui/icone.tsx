@@ -8,27 +8,40 @@ import {
   ArrowUpRight,
   Bell,
   Calendar,
+  CalendarPlus,
   Camera,
   Car,
   ChartBar,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
   Ellipsis,
+  Euro,
   Eye,
   Flag,
+  Gauge,
   Lock,
   MessageSquare,
+  Mic,
+  MicOff,
+  Package,
   Paperclip,
   Pause,
   Phone,
   PhoneCall,
+  Play,
+  PhoneOff,
   Plus,
+  RotateCcw,
+  RotateCw,
   Search,
   Settings,
   TriangleAlert,
+  Undo2,
   Users,
+  Volume2,
   Wrench,
   X,
   type LucideIcon,
@@ -46,6 +59,7 @@ export type NomIcone =
   | 'plus'
   | 'chevron.droite'
   | 'chevron.gauche'
+  | 'chevron.bas'
   | 'fermer'
   | 'valider'
   | 'voiture'
@@ -63,7 +77,20 @@ export type NomIcone =
   | 'pause'
   | 'oeil'
   | 'menu'
-  | 'drapeau';
+  | 'drapeau'
+  | 'lecture'
+  | 'reculer'
+  | 'avancer'
+  | 'micro'
+  | 'micro.coupe'
+  | 'haut-parleur'
+  | 'decrocher'
+  | 'raccrocher'
+  | 'compteur'
+  | 'annuler'
+  | 'colis'
+  | 'euro'
+  | 'calendrier';
 
 const SF: Record<NomIcone, string> = {
   planning: 'calendar',
@@ -74,6 +101,7 @@ const SF: Record<NomIcone, string> = {
   plus: 'plus',
   'chevron.droite': 'chevron.right',
   'chevron.gauche': 'chevron.left',
+  'chevron.bas': 'chevron.down',
   fermer: 'xmark',
   valider: 'checkmark',
   voiture: 'car',
@@ -92,6 +120,19 @@ const SF: Record<NomIcone, string> = {
   oeil: 'eye',
   menu: 'ellipsis',
   drapeau: 'flag.fill',
+  lecture: 'play.fill',
+  reculer: 'gobackward.10',
+  avancer: 'goforward.10',
+  micro: 'mic.fill',
+  'micro.coupe': 'mic.slash.fill',
+  'haut-parleur': 'speaker.wave.2.fill',
+  decrocher: 'phone.fill',
+  raccrocher: 'phone.down.fill',
+  compteur: 'gauge.with.dots.needle.33percent',
+  annuler: 'arrow.uturn.backward',
+  colis: 'shippingbox',
+  euro: 'eurosign',
+  calendrier: 'calendar.badge.plus',
 };
 
 const LUCIDE: Record<NomIcone, LucideIcon> = {
@@ -103,6 +144,7 @@ const LUCIDE: Record<NomIcone, LucideIcon> = {
   plus: Plus,
   'chevron.droite': ChevronRight,
   'chevron.gauche': ChevronLeft,
+  'chevron.bas': ChevronDown,
   fermer: X,
   valider: Check,
   voiture: Car,
@@ -121,6 +163,19 @@ const LUCIDE: Record<NomIcone, LucideIcon> = {
   oeil: Eye,
   menu: Ellipsis,
   drapeau: Flag,
+  lecture: Play,
+  reculer: RotateCcw,
+  avancer: RotateCw,
+  micro: Mic,
+  'micro.coupe': MicOff,
+  'haut-parleur': Volume2,
+  decrocher: Phone,
+  raccrocher: PhoneOff,
+  compteur: Gauge,
+  annuler: Undo2,
+  colis: Package,
+  euro: Euro,
+  calendrier: CalendarPlus,
 };
 
 /** Nom SF Symbol pour les onglets natifs. */

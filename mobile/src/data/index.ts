@@ -75,4 +75,5 @@ export async function choisirBackend(b: Backend): Promise<void> {
   }
 }
 
-export type { Repo, Snapshot, NouvelleIntervention, NouveauMembre } from './repo';
+export type { Repo, Snapshot, NouvelleIntervention, NouveauMembre, NouvelleInscription, RenvoiReceptionniste } from './repo';
+export { AdresseNonConfirmee } from './repo';

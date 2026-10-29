@@ -2,9 +2,11 @@
  * Appel en cours avec le réceptionniste : carte verte, point qui pulse,
  * durée qui défile, et la fiche qui se remplit en direct à mesure que
  * l'appelant confirme ses informations (outil update_call_context de
- * l'agent, via Realtime). Pas d'action : l'appelant est en ligne avec le
- * réceptionniste ; le rappel et la fiche à valider viennent à la fin de
- * l'appel. Texte affiché tel quel : il est dicté par l'appelant.
+ * l'agent, via Realtime). L'appelant est en ligne avec le réceptionniste ;
+ * le rappel et la fiche à valider viennent à la fin de l'appel. Quand le
+ * réceptionniste passe l'appel à l'équipe (0016), la carte le suit jusqu'au
+ * décroché (`BlocTransfert`). Texte affiché tel quel : il est dicté par
+ * l'appelant.
  */
 
 import { useEffect, useState } from 'react';
@@ -19,27 +21,16 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Plaque } from '@/components/ui/plaque';
 import { Etiquette, Legende, Secondaire, Texte } from '@/components/ui/texte';
 import { LIBELLES_ETAPE } from '@/domain/appels';
-import type { Appel, ChampContexte } from '@/domain/types';
-import { dureeSecondes, formaterPlaque, formaterTelephone, ilYA, kilometrage } from '@/lib/format';
+import type { Appel } from '@/domain/types';
+import { dureeSecondes, formaterTelephone, ilYA } from '@/lib/format';
+
+import { BlocTransfert } from './BlocTransfert';
+import { donneesAppelant } from './donnees-appelant';
+import { InfosAppelant, aDesInfos } from './InfosAppelant';
 
 const secondesDepuis = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-
-/** Une information de la fiche : libellé, valeur, et « à confirmer » si l'appelant ne l'a pas encore validée. */
-function Info({ libelle, champ, valeur }: { libelle: string; champ?: ChampContexte; valeur?: string }) {
-  if (!valeur) return null;
-  return (
-    <View accessible accessibilityLabel={`${libelle} : ${valeur}${champ && !champ.confirme ? ', à confirmer' : ''}`}>
-      <Legende>{libelle}</Legende>
-      <View className="mt-0.5 flex-row flex-wrap items-baseline gap-x-2">
-        <Texte selectable>{valeur}</Texte>
-        {champ && !champ.confirme ? <Legende ton="warn">à confirmer</Legende> : null}
-      </View>
-    </View>
-  );
-}
 
 export function CarteAppelEnCours({ appel }: { appel: Appel }) {
   // Halo qui respire autour du point vert.
@@ -60,20 +51,12 @@ export function CarteAppelEnCours({ appel }: { appel: Appel }) {
     return () => clearInterval(id);
   }, [appel.debut]);
 
-  const c = appel.contexte?.champs ?? {};
-  const nomDicte = [c.prenom?.valeur, c.nom?.valeur].filter(Boolean).join(' ');
+  const d = donneesAppelant(appel);
   const numero = appel.numero ? formaterTelephone(appel.numero) : '';
-  const titre = appel.appelant || nomDicte || numero || 'Numéro masqué';
+  const titre = appel.appelant || d.identite?.texte || numero || 'Numéro masqué';
   const sousTitre = titre !== numero ? numero : '';
-  // Le numéro de rappel n'est repris que s'il diffère de celui qui appelle.
-  const rappelDicte = c.telephoneRappel ? formaterTelephone(c.telephoneRappel.valeur) : '';
-  const rappel = rappelDicte !== numero ? rappelDicte : '';
-  const vehicule = [c.marque?.valeur, c.modele?.valeur].filter(Boolean).join(' ');
-  const vehiculeConfirme = [c.marque, c.modele].every((x) => !x || x.confirme);
-  const plaque = c.immatriculation ? formaterPlaque(c.immatriculation.valeur) : '';
-  const km = c.kilometrage ? kilometrage(Number(c.kilometrage.valeur)) : '';
   const etape = appel.contexte?.etape;
-  const rien = !rappel && !vehicule && !plaque && !km && !c.motif;
+  const rien = !aDesInfos(d);
 
   return (
     <Animated.View
@@ -100,6 +83,7 @@ export function CarteAppelEnCours({ appel }: { appel: Appel }) {
           {`Étape : ${LIBELLES_ETAPE[etape]}`}
         </Legende>
       ) : null}
+      <BlocTransfert appel={appel} />
 
       <Etiquette className="mt-4">Fiche en direct</Etiquette>
       {rien ? (
@@ -107,27 +91,7 @@ export function CarteAppelEnCours({ appel }: { appel: Appel }) {
           Le réceptionniste est en ligne. Les informations confirmées par l’appelant s’affichent ici au fil de l’appel.
         </Secondaire>
       ) : (
-        <View className="mt-2 gap-3">
-          <Info libelle="Numéro de rappel" champ={c.telephoneRappel} valeur={rappel} />
-          <Info
-            libelle="Véhicule"
-            champ={vehicule ? { valeur: vehicule, confirme: vehiculeConfirme } : undefined}
-            valeur={vehicule}
-          />
-          {plaque ? (
-            <View
-              accessible
-              accessibilityLabel={`Immatriculation : ${plaque.split('').join(' ')}${c.immatriculation?.confirme ? '' : ', à confirmer'}`}>
-              <Legende>Immatriculation</Legende>
-              <View className="mt-1 flex-row items-center gap-2">
-                <Plaque plaque={plaque} />
-                {c.immatriculation?.confirme ? null : <Legende ton="warn">à confirmer</Legende>}
-              </View>
-            </View>
-          ) : null}
-          <Info libelle="Kilométrage" champ={c.kilometrage} valeur={km} />
-          <Info libelle="Motif" champ={c.motif} valeur={c.motif?.valeur} />
-        </View>
+        <InfosAppelant donnees={d} className="mt-2" />
       )}
       {appel.contexte?.majLe ? (
         <Legende className="mt-4">{`Mis à jour ${ilYA(appel.contexte.majLe)}`}</Legende>

@@ -95,10 +95,26 @@ export function calculerStats(e: Entree): Stats {
   };
 
   const creees = e.interventions.filter((i) => dans(dateCreation(i), b));
+  /** Rendez-vous pris : ni annulés, ni demandes restées « À valider » (comme rdvParJour pour les annulés). */
+  const rendezVous = creees.filter((i) => i.statut !== 'annule' && i.statut !== 'a_valider').length;
 
+  /**
+   * Livrées : statut actuel « Livré » seulement (une livraison annulée par le
+   * gérant ou par « Annuler » ne compte plus), datées de leur dernière
+   * livraison (une voiture livrée, rendue à « Prêt », puis livrée de nouveau
+   * compte le jour où elle est vraiment partie).
+   */
+  const derniereLivraison = (i: Intervention): string => {
+    let le: string | null = null;
+    for (const ev of parIntervention.get(i.id) ?? []) {
+      if (ev.type === 'statut' && ev.valeur === 'livre' && (!le || ev.creeLe > le)) le = ev.creeLe;
+    }
+    return le ?? i.majLe;
+  };
   const livrees = e.interventions
-    .map((i) => ({ i, le: dateStatut(i, ['livre']) }))
-    .filter((x): x is { i: Intervention; le: string } => x.le !== null && dans(x.le, b));
+    .filter((i) => i.statut === 'livre')
+    .map((i) => ({ i, le: derniereLivraison(i) }))
+    .filter((x) => dans(x.le, b));
 
   const delais = livrees.map(({ i, le }) => {
     const depuis = dateStatut(i, ['recu', 'en_cours']) ?? i.debut;
@@ -144,7 +160,7 @@ export function calculerStats(e: Entree): Stats {
   }
 
   return {
-    rendezVous: creees.length,
+    rendezVous,
     livres: livrees.length,
     delaiMoyenJours,
     bloquees: e.interventions.filter(estBloquee).length,

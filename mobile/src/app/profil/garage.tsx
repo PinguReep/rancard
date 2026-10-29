@@ -1,12 +1,16 @@
 /**
- * Le garage (gérant) : identité, horaires, SMS, réceptionniste. Chaque
- * champ s'enregistre au blur, chaque interrupteur tout de suite.
+ * Le garage (gérant) : identité, horaires, site internet, SMS,
+ * réceptionniste. Chaque champ s'enregistre au blur, chaque interrupteur
+ * tout de suite.
  *
- * Sur un vrai garage (backend supabase), les options SMS et réceptionniste
- * et l'expéditeur des SMS sont réglés par l'équipe Rencar (la base refuse
- * leur modification par le gérant, trigger garages_garde) : ils sont
- * affichés en lecture seule. L'envoi automatique et le texte du SMS restent
- * au gérant. La démonstration locale garde tout modifiable.
+ * Les prestations (site internet, relances SMS, réceptionniste IA) sont
+ * réglées par l'équipe Rencar (la base refuse leur modification par le
+ * gérant, trigger garages_garde) : elles sont affichées en lecture seule,
+ * démonstration comprise, incluses ou grisées avec la phrase neutre de
+ * `domain/prestations.ts`. Sur un vrai garage, l'expéditeur des SMS l'est
+ * aussi. L'envoi automatique (avec les relances SMS) et le texte du SMS
+ * « véhicule prêt » (qui sert aussi à l'app SMS du téléphone) restent au
+ * gérant.
  */
 
 import { Stack } from 'expo-router';
@@ -18,17 +22,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avis, useAvis } from '@/components/intervention/Avis';
 import { LigneHoraire, ORDRE_JOURS, type Plage } from '@/components/profil/LigneHoraire';
 import { LigneInterrupteur } from '@/components/profil/LigneInterrupteur';
+import { LignePrestation } from '@/components/profil/LignePrestation';
 import { useMembreCourant } from '@/components/profil/useMembreCourant';
 import { Carte, Champ, Ecran, Etiquette, Groupe, Legende, Section, Texte, Vide, impulsion } from '@/components/ui';
 import { BACKEND, repo } from '@/data';
 import { estGerant } from '@/domain/permissions';
+import { aPrestation, LIBELLES_PRESTATION, NON_INCLUS } from '@/domain/prestations';
 import type { Garage } from '@/domain/types';
 import { ecrire } from '@/lib/ecrire';
-import { formaterTelephone, gabaritSms } from '@/lib/format';
+import { formaterTelephone, gabaritSms, lettresRemplacees, mesureSms, normaliserSms } from '@/lib/format';
+import { lienSuivi } from '@/lib/suivi';
 import { useDonnees } from '@/state/session';
 
 const EXPEDITEUR = /^[A-Z0-9]{3,11}$/;
-const PAR_RENCAR = 'Réglé par l’équipe Rencar : écrivez-nous pour le changer.';
+const PAR_RENCAR = 'Réglé par l’équipe Rencar selon l’offre du garage.';
 
 export default function ReglagesGarage() {
   const insets = useSafeAreaInsets();
@@ -118,10 +125,24 @@ export default function ReglagesGarage() {
     }
   }
 
-  const apercu = gabaritSms(texteSms, { prenom: 'Élodie', garage: garage.nom });
-  const sms = garage.options.sms;
+  // Aperçu du texte tel qu’il part. Avec les relances SMS, Rencar l’envoie
+  // comme le serveur le prépare (ponctuation ramenée au GSM-7, lettres hors
+  // GSM-7 sans accent) et l’aperçu dit ce qu’il coûte : un caractère qui
+  // reste hors GSM-7 (émoji…) limite chaque SMS à 70 caractères au lieu de
+  // 160 ; les lettres remplacées (ê → e…) sont signalées, pour que le
+  // gérant reformule s’il tient à l’orthographe. Sans elles, le texte part
+  // tel quel de l’app SMS du téléphone, suivi du lien de suivi
+  // (FeuilleSmsPret) : ni décompte, ni accent retiré.
+  const sms = aPrestation(garage, 'sms');
+  const rempli = gabaritSms(texteSms, { prenom: 'Élodie', garage: garage.nom });
+  const apercu = sms ? normaliserSms(rempli) : `${rempli}\n${lienSuivi('exemple')}`;
+  const mesure = mesureSms(apercu);
+  const remplacees = lettresRemplacees(rempli).map(([de, vers]) => `${de} → ${vers}`).join(', ');
+  const speciaux = mesure.horsGsm.map((c) => `« ${c} »`).join(', ');
   // Lu au rendu : ne change qu'entre deux sessions (voir data/index.ts).
   const parRencar = BACKEND === 'supabase';
+  // Sans relances SMS, l’expéditeur ne sert à rien : affiché grisé, non modifiable.
+  const expediteurModifiable = sms && !parRencar;
 
   return (
     <Ecran sansHaut>
@@ -144,77 +165,79 @@ export default function ReglagesGarage() {
           ))}
         </Groupe>
 
-        <Groupe titre="SMS" note={sms ? undefined : 'Sans SMS, l’équipe prévient le client par téléphone depuis la fiche.'}>
-          <LigneInterrupteur
-            titre="SMS aux clients"
-            aide={parRencar ? PAR_RENCAR : 'Véhicule prêt, rappels de rendez-vous.'}
-            valeur={sms}
-            onChange={(v) => options({ sms: v })}
-            desactive={parRencar}
-            derniere={!sms}
-          />
-          {sms ? (
-            <LigneInterrupteur
-              titre="Envoi automatique"
-              aide="Le SMS « véhicule prêt » part dès le changement de statut, sans confirmation."
-              valeur={garage.options.smsAutomatique}
-              onChange={(v) => options({ smsAutomatique: v })}
-              derniere
-            />
-          ) : null}
+        <Groupe titre="Site internet">
+          <LignePrestation titre="Rendez-vous pris sur le site" incluse={aPrestation(garage, 'site')} derniere />
         </Groupe>
 
-        {sms ? (
-          <>
-            <Champ
-              libelle="Expéditeur"
-              type="plaque"
-              value={expediteur}
-              onChangeText={(v) => {
-                setExpediteur(v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11));
-                setErreurExpediteur(null);
-              }}
-              onBlur={parRencar ? undefined : validerExpediteur}
-              editable={!parRencar}
-              erreur={erreurExpediteur}
-              aide={
-                parRencar
-                  ? `Nom affiché sur le téléphone du client. ${PAR_RENCAR}`
-                  : 'Nom affiché sur le téléphone du client. 11 caractères maximum, lettres et chiffres, sans espace (ex. GARAGEFICTI).'
-              }
-              maxLength={11}
-              returnKeyType="done"
-            />
-            <Champ
-              libelle="Texte du SMS « véhicule prêt »"
-              type="multiligne"
-              value={texteSms}
-              onChangeText={setTexteSms}
-              onBlur={validerTexteSms}
-              aide="{prenom} et {garage} sont remplacés par le prénom du client et le nom du garage."
-            />
-            <Carte className="mb-6 p-4">
-              <Etiquette className="mb-2">Aperçu</Etiquette>
-              <View className="self-start rounded-2xl rounded-tl-md bg-surface2 dark:bg-surface2-dark px-3.5 py-2.5">
-                <Texte>{apercu}</Texte>
-              </View>
-              <Legende className="mt-2">
-                {apercu.length} caractère{apercu.length > 1 ? 's' : ''}
-                {apercu.length > 160 ? ' · au-delà de 160, le message compte pour plusieurs SMS' : ''}
-              </Legende>
-            </Carte>
-          </>
-        ) : null}
-
-        <Groupe titre="Réceptionniste téléphonique" note="Active l’onglet Appels. Le service lui-même est branché par Rencar.">
+        <Groupe titre="SMS" note={sms ? undefined : 'Sans relances SMS, l’équipe prévient le client depuis l’app SMS du téléphone, lien de suivi compris.'}>
+          <LignePrestation titre={LIBELLES_PRESTATION.sms} incluse={sms} />
           <LigneInterrupteur
-            titre="Réceptionniste"
-            aide={parRencar ? PAR_RENCAR : 'Répond aux appels et crée des fiches à valider.'}
-            valeur={garage.options.receptionniste}
-            onChange={(v) => options({ receptionniste: v })}
-            desactive={parRencar}
+            titre="Envoi automatique"
+            aide={sms ? 'Le SMS « véhicule prêt » part dès le changement de statut, sans confirmation.' : NON_INCLUS}
+            valeur={sms && garage.options.smsAutomatique}
+            onChange={(v) => options({ smsAutomatique: v })}
+            desactive={!sms}
             derniere
           />
+        </Groupe>
+
+        <View className={sms ? '' : 'opacity-50'}>
+          <Champ
+            libelle="Expéditeur"
+            type="plaque"
+            value={expediteur}
+            onChangeText={(v) => {
+              setExpediteur(v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11));
+              setErreurExpediteur(null);
+            }}
+            onBlur={expediteurModifiable ? validerExpediteur : undefined}
+            editable={expediteurModifiable}
+            erreur={erreurExpediteur}
+            aide={
+              !sms
+                ? NON_INCLUS
+                : parRencar
+                  ? `Nom affiché sur le téléphone du client. ${PAR_RENCAR}`
+                  : 'Nom affiché sur le téléphone du client. 11 caractères maximum, lettres et chiffres, sans espace (ex. GARAGEFICTI).'
+            }
+            maxLength={11}
+            returnKeyType="done"
+          />
+        </View>
+
+        <Champ
+          libelle="Texte du SMS « véhicule prêt »"
+          type="multiligne"
+          value={texteSms}
+          onChangeText={setTexteSms}
+          onBlur={validerTexteSms}
+          aide="{prenom} et {garage} sont remplacés par le prénom du client et le nom du garage."
+        />
+        <Carte className="mb-6 p-4">
+          <Etiquette className="mb-2">Aperçu</Etiquette>
+          <View className="self-start rounded-2xl rounded-tl-md bg-surface2 dark:bg-surface2-dark px-3.5 py-2.5">
+            <Texte>{apercu}</Texte>
+          </View>
+          {sms ? (
+            <>
+              <Legende className="mt-2">
+                {apercu.length} caractère{apercu.length > 1 ? 's' : ''}
+                {mesure.segments > 1 ? ` · compte pour ${mesure.segments} SMS` : ' · 1 SMS'}
+                {mesure.horsGsm.length
+                  ? ` · ${speciaux} ${mesure.horsGsm.length > 1 ? 'limitent' : 'limite'} chaque SMS à 70 caractères`
+                  : ''}
+              </Legende>
+              {remplacees ? (
+                <Legende className="mt-1">{`Envoyé sans accent : ${remplacees}. Reformulez pour garder l’orthographe.`}</Legende>
+              ) : null}
+            </>
+          ) : (
+            <Legende className="mt-2">Message proposé dans l’app SMS du téléphone, avec le lien de suivi du client.</Legende>
+          )}
+        </Carte>
+
+        <Groupe titre="Réceptionniste téléphonique" note={aPrestation(garage, 'receptionniste') ? 'Les appels traités s’affichent dans l’onglet Appels.' : undefined}>
+          <LignePrestation titre={LIBELLES_PRESTATION.receptionniste} incluse={aPrestation(garage, 'receptionniste')} derniere />
         </Groupe>
 
         <Legende className="ml-1">Les modifications sont enregistrées au fur et à mesure.</Legende>

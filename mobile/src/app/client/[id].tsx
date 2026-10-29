@@ -3,6 +3,12 @@
  * l'équipe qui voit le client), véhicules (kilométrage modifiable, ajout avec
  * la permission creer), historique des interventions, action principale
  * « Nouvelle intervention » ancrée en bas.
+ *
+ * v2c (D6) : le mobile est facultatif. Sans numéro (ou avec un numéro qui ne
+ * tient pas), la ligne « Mobile à compléter » ouvre la modification du
+ * client ; l’appel n’est proposé qu’avec un numéro valide, le SMS (lien
+ * `sms:`) qu’avec un mobile. Chaque intervention montre sa plaque, et son
+ * kilométrage au dépôt une fois close.
  */
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,15 +20,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ConsultationFiche } from '@/components/consultation';
 import { CarteVehicule } from '@/components/clients/CarteVehicule';
+import { FormulaireClient, LEGENDE_NUMERO_ETRANGER, LEGENDE_NUMERO_FIXE, validerClient, versClient, type ErreursClient, type ValeursClient } from '@/components/clients/FormulaireClient';
 import { FormulaireVehicule, VEHICULE_VIDE, validerVehicule, versVehicule, type ErreursVehicule, type ValeursVehicule } from '@/components/clients/FormulaireVehicule';
 import { LigneIntervention } from '@/components/clients/LigneIntervention';
 import { ModaleFormulaire } from '@/components/clients/ModaleFormulaire';
-import { interventionsVisibles, pluriel } from '@/components/clients/outils';
+import { interventionsVisibles, mobileJoignable, pluriel, telephoneAppelable, telephoneComposable } from '@/components/clients/outils';
 import { Avis, useAvis } from '@/components/intervention/Avis';
+import { phrasePlaqueConnue, vehiculeDeLaPlaque } from '@/components/nouvelle-intervention/doublons';
 import { Bouton, Champ, Ecran, Erreur, Groupe, Icone, LARGEUR_MAX, Legende, Ligne, Secondaire, Section, Texte, Titre, Vide, impulsion } from '@/components/ui';
 import { BarreClavier, HAUTEUR_BARRE_CLAVIER } from '@/components/ui/barre-clavier';
 import { repo } from '@/data';
-import { formaterTelephone, mailtoHref, telHref } from '@/lib/format';
+import { dePrenom, formaterTelephone, mailtoHref, nomClient, numeroLien, telHref } from '@/lib/format';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
 import { useTheme } from '@/theme/tokens';
 
@@ -37,6 +45,7 @@ export default function FicheClient() {
 
   const client = useDonnees((s) => s.clients.find((c) => c.id === id));
   const vehicules = useDonnees((s) => s.vehicules);
+  const clients = useDonnees((s) => s.clients);
   const interventions = useDonnees((s) => s.interventions);
 
   const mesVehicules = useMemo(() => vehicules.filter((v) => v.clientId === id), [vehicules, id]);
@@ -58,6 +67,14 @@ export default function FicheClient() {
   const [erreurs, setErreurs] = useState<ErreursVehicule>({});
   const [erreurGlobale, setErreurGlobale] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
+
+  // Modification du client (« Mobile à compléter ») : prénom, nom, mobile.
+  const [modaleClient, setModaleClient] = useState(false);
+  const [valeursClient, setValeursClient] = useState<ValeursClient | null>(null);
+  const [initialesClient, setInitialesClient] = useState<ValeursClient | null>(null);
+  const [erreursClient, setErreursClient] = useState<ErreursClient>({});
+  const [erreurClient, setErreurClient] = useState<string | null>(null);
+  const [enCoursClient, setEnCoursClient] = useState(false);
 
   // Même règle que clientsVisibles : tout avec voirTout, sinon les clients de
   // ses interventions et ceux qui n'en ont encore aucune (fiche juste créée).
@@ -101,6 +118,10 @@ export default function FicheClient() {
     setModale(true);
   }
 
+  // Doublon (P4, comme l’assistant) : une plaque déjà enregistrée le dit avant l’enregistrement, sans bloquer.
+  const plaqueConnue = modale ? vehiculeDeLaPlaque(vehicules, valeurs.plaque) : undefined;
+  const proprietaire = plaqueConnue ? clients.find((c) => c.id === plaqueConnue.clientId) : undefined;
+
   async function ajouterVehicule() {
     if (!client) return;
     const e = validerVehicule(valeurs);
@@ -122,7 +143,66 @@ export default function FicheClient() {
     }
   }
 
+  function ouvrirModaleClient() {
+    if (!client) return;
+    const depart: ValeursClient = {
+      prenom: client.prenom,
+      nom: client.nom,
+      telephone: client.telephone,
+      email: client.email ?? '',
+      memo: client.memo ?? '',
+    };
+    setValeursClient(depart);
+    setInitialesClient(depart);
+    setErreursClient({});
+    setErreurClient(null);
+    setModaleClient(true);
+  }
+
+  async function enregistrerClient() {
+    if (!client || !valeursClient) return;
+    const e = validerClient(valeursClient);
+    setErreursClient(e);
+    if (Object.keys(e).length) {
+      impulsion('erreur');
+      return;
+    }
+    setEnCoursClient(true);
+    setErreurClient(null);
+    try {
+      // Seuls les champs du formulaire : le mémo se modifie en place, sur la fiche.
+      const { prenom, nom, telephone } = versClient(valeursClient);
+      await repo().modifierClient(client.id, { prenom, nom, telephone });
+      impulsion('succes');
+      setModaleClient(false);
+      const nouveauNumero = telephone && telephone !== formaterTelephone(client.telephone);
+      montrerAvis(`${nouveauNumero ? 'Numéro enregistré' : 'Fiche client enregistrée'} · ${prenom} ${nom}`);
+    } catch (err) {
+      setErreurClient((err as Error).message || 'Impossible d’enregistrer le client pour le moment.');
+    } finally {
+      setEnCoursClient(false);
+    }
+  }
+
   const plusieursVehicules = mesVehicules.length > 1;
+  const telephone = client.telephone.trim();
+  // L’appel accepte tout numéro composable (étranger compris) ; le SMS, un mobile français seulement.
+  const appelable = telephoneComposable(telephone);
+  const mobile = mobileJoignable(telephone);
+  // Sous « Mobile à compléter » : pourquoi pas de SMS (fixe, numéro étranger), ou le numéro enregistré qui ne tient pas.
+  const aideMobile = mobile
+    ? null
+    : telephoneAppelable(telephone)
+      ? LEGENDE_NUMERO_FIXE
+      : appelable
+        ? LEGENDE_NUMERO_ETRANGER
+        : telephone
+          ? `${telephone} : numéro à vérifier`
+          : null;
+  const clientModifie =
+    valeursClient !== null &&
+    initialesClient !== null &&
+    (Object.keys(valeursClient) as (keyof ValeursClient)[]).some((k) => valeursClient[k] !== initialesClient[k]);
 
   return (
     <Ecran sansHaut>
@@ -140,20 +220,51 @@ export default function FicheClient() {
           alignSelf: 'center',
         }}>
         <Titre className="text-[30px] leading-[36px]">
-          {client.prenom} {client.nom}
+          {nomClient(client)}
         </Titre>
         <ConsultationFiche fiche={`client:${client.id}`} className="mt-3" />
 
         <Groupe className="mt-5">
-          <Ligne
-            onPress={() => void Linking.openURL(telHref(client.telephone))}
-            derniere={!client.email}
-            accessibilityLabel={`Appeler ${formaterTelephone(client.telephone)}`}>
-            <Texte ton="accent" className="flex-1 font-mono">
-              {formaterTelephone(client.telephone)}
-            </Texte>
-            <Icone nom="telephone" taille={20} couleur={t.ok} />
-          </Ligne>
+          {appelable ? (
+            <Ligne
+              onPress={() => void Linking.openURL(telHref(telephone))}
+              derniere={false}
+              accessibilityLabel={`Appeler ${formaterTelephone(telephone)}`}>
+              <Texte ton="accent" className="flex-1 font-mono">
+                {formaterTelephone(telephone)}
+              </Texte>
+              <Icone nom="telephone" taille={20} couleur={t.ok} />
+            </Ligne>
+          ) : null}
+          {mobile ? (
+            <Ligne
+              onPress={() => void Linking.openURL(`sms:${numeroLien(telephone)}`)}
+              derniere={!client.email}
+              accessibilityLabel={`Envoyer un SMS au ${formaterTelephone(telephone)}`}>
+              <Texte ton="accent" className="flex-1">
+                Envoyer un SMS
+              </Texte>
+              <Icone nom="message" taille={20} couleur={t.accent} />
+            </Ligne>
+          ) : (
+            // Pas de mobile (D6) : aucun numéro, un fixe, ou un numéro qui ne tient pas. La ligne ouvre la modification.
+            <Ligne
+              onPress={ouvrirModaleClient}
+              derniere={!client.email}
+              accessibilityLabel={`Mobile à compléter${aideMobile ? `, ${aideMobile.replace(/\.$/, '')}` : ''}. Modifier`}>
+              <View className="flex-1">
+                <Texte ton="warn" className="font-semibold">
+                  Mobile à compléter
+                </Texte>
+                {aideMobile ? (
+                  <Legende numberOfLines={2} className="mt-0.5">
+                    {aideMobile}
+                  </Legende>
+                ) : null}
+              </View>
+              <Icone nom="chevron.droite" taille={16} couleur={t.faint} />
+            </Ligne>
+          )}
           {client.email ? (
             <Ligne onPress={() => void Linking.openURL(mailtoHref(client.email ?? ''))} derniere accessibilityLabel={`Écrire à ${client.email}`}>
               <Texte ton="accent" numberOfLines={1} className="flex-1">
@@ -204,7 +315,8 @@ export default function FicheClient() {
               <LigneIntervention
                 key={i.id}
                 intervention={i}
-                vehicule={plusieursVehicules ? mesVehicules.find((v) => v.id === i.vehiculeId) : undefined}
+                vehicule={mesVehicules.find((v) => v.id === i.vehiculeId)}
+                avecModele={plusieursVehicules}
                 voirPrix={p.voirPrix}
                 derniere={idx === mesInterventions.length - 1}
                 onPress={() => router.push(`/intervention/${i.id}`)}
@@ -233,12 +345,49 @@ export default function FicheClient() {
         pied={
           <View>
             {erreurGlobale ? <Erreur className="mb-3">{erreurGlobale}</Erreur> : null}
-            <Bouton onPress={ajouterVehicule} chargement={enCours}>
-              Enregistrer le véhicule
-            </Bouton>
+            {plaqueConnue ? (
+              <>
+                <Legende ton="warn" className="mb-3" accessibilityLiveRegion="polite">
+                  {phrasePlaqueConnue(plaqueConnue, proprietaire)}
+                </Legende>
+                <Bouton
+                  onPress={() => {
+                    setModale(false);
+                    // Le véhicule est peut-être déjà sur cette fiche : on y reste ; sinon, la fiche de son propriétaire.
+                    if (proprietaire && proprietaire.id !== client?.id) router.push(`/client/${proprietaire.id}`);
+                  }}
+                  accessibilityLabel={proprietaire && proprietaire.id !== client?.id ? `Ouvrir la fiche ${dePrenom(nomClient(proprietaire))}` : 'Revenir au véhicule déjà enregistré'}>
+                  {proprietaire && proprietaire.id !== client?.id ? 'Ouvrir sa fiche' : 'Ne pas l’ajouter'}
+                </Bouton>
+                <Bouton variante="discret" className="mt-2" onPress={ajouterVehicule} chargement={enCours}>
+                  Enregistrer quand même
+                </Bouton>
+              </>
+            ) : (
+              <Bouton onPress={ajouterVehicule} chargement={enCours}>
+                Enregistrer le véhicule
+              </Bouton>
+            )}
           </View>
         }>
         <FormulaireVehicule valeurs={valeurs} onChange={setValeurs} erreurs={erreurs} autoFocus onSubmit={ajouterVehicule} />
+      </ModaleFormulaire>
+      <ModaleFormulaire
+        ouverte={modaleClient}
+        onFermer={() => setModaleClient(false)}
+        titre="Modifier le client"
+        vide={!clientModifie && !enCoursClient}
+        pied={
+          <View>
+            {erreurClient ? <Erreur className="mb-3">{erreurClient}</Erreur> : null}
+            <Bouton onPress={enregistrerClient} chargement={enCoursClient}>
+              Enregistrer
+            </Bouton>
+          </View>
+        }>
+        {valeursClient ? (
+          <FormulaireClient valeurs={valeursClient} onChange={setValeursClient} erreurs={erreursClient} onSubmit={enregistrerClient} />
+        ) : null}
       </ModaleFormulaire>
       {/* Le kilométrage s’ouvre sur un pavé numérique sans touche de validation : « OK » au-dessus du clavier. */}
       <BarreClavier />

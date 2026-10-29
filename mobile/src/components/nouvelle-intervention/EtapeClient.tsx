@@ -1,6 +1,9 @@
 /**
  * Étape 1 : choisir un client existant (recherche, mêmes règles que
- * l'onglet Clients) ou en créer un nouveau (prénom, nom, mobile).
+ * l'onglet Clients) ou en créer un nouveau (prénom, nom, mobile). Ce qui a
+ * été tapé dans la recherche n'est jamais à retaper : numéro, nom ou plaque
+ * partent vers le formulaire. Depuis un appel dont la plaque est déjà
+ * enregistrée chez un client, ce client est proposé sous le formulaire.
  */
 
 import { View } from 'react-native';
@@ -9,7 +12,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { AvatarClient } from '@/components/clients/AvatarClient';
 import { BarreRecherche } from '@/components/clients/BarreRecherche';
 import { FormulaireClient, type ErreursClient, type ValeursClient } from '@/components/clients/FormulaireClient';
-import { filtrerFiches, libelleVehicule, pluriel, type FicheClient } from '@/components/clients/outils';
+import { filtrerFiches, libelleVehicule, pluriel, valeursDepuisRecherche, type DepartRecherche, type FicheClient } from '@/components/clients/outils';
 import { Bouton } from '@/components/ui/bouton';
 import { Groupe, Ligne } from '@/components/ui/carte';
 import { Icone } from '@/components/ui/icone';
@@ -17,6 +20,7 @@ import { Plaque } from '@/components/ui/plaque';
 import { Secondaire, Texte } from '@/components/ui/texte';
 import { Vide } from '@/components/ui/vide';
 import type { Client, Vehicule } from '@/domain/types';
+import { nomClient } from '@/lib/format';
 import { useTheme } from '@/theme/tokens';
 
 const MAX_RESULTATS = 30;
@@ -27,22 +31,17 @@ type Props = {
   onRequete: (q: string) => void;
   /** true = formulaire « nouveau client » affiché à la place de la liste */
   nouveau: boolean;
-  onNouveau: (valeursInitiales?: Partial<ValeursClient>) => void;
+  /** Départ du formulaire tiré de la recherche (mobile, prénom et nom, plaque) */
+  onNouveau: (depart: DepartRecherche) => void;
   onRetourListe: () => void;
   valeurs: ValeursClient;
   onChangeValeurs: (v: ValeursClient) => void;
   erreurs: ErreursClient;
   onChoisir: (c: Client, v?: Vehicule) => void;
   onContinuer: () => void;
+  /** Plaque donnée pendant l'appel, déjà enregistrée chez ce client */
+  plaqueConnue?: { client: Client; vehicule: Vehicule };
 };
-
-/** « Manon Lefèvre » → prénom « Manon », nom « Lefèvre » pour préremplir. */
-export function devinerNom(requete: string): Partial<ValeursClient> {
-  const mots = requete.trim().split(/\s+/).filter(Boolean);
-  if (!mots.length || /\d/.test(requete)) return {};
-  const cap = (m: string) => m.charAt(0).toUpperCase() + m.slice(1);
-  return mots.length === 1 ? { nom: cap(mots[0]) } : { prenom: cap(mots[0]), nom: mots.slice(1).map(cap).join(' ') };
-}
 
 export function EtapeClient({
   fiches,
@@ -56,6 +55,7 @@ export function EtapeClient({
   erreurs,
   onChoisir,
   onContinuer,
+  plaqueConnue,
 }: Props) {
   const t = useTheme();
 
@@ -69,6 +69,25 @@ export function EtapeClient({
           </Bouton>
         </View>
         <FormulaireClient valeurs={valeurs} onChange={onChangeValeurs} erreurs={erreurs} autoFocus onSubmit={onContinuer} />
+        {plaqueConnue ? (
+          <Groupe titre="Plaque déjà enregistrée" note="Même plaque que celle donnée pendant l’appel. Choisissez ce client si c’est bien lui." className="mt-2">
+            <Ligne
+              onPress={() => onChoisir(plaqueConnue.client, plaqueConnue.vehicule)}
+              derniere
+              accessibilityLabel={`Choisir ${nomClient(plaqueConnue.client)}, ${libelleVehicule(plaqueConnue.vehicule)}, plaque ${plaqueConnue.vehicule.plaque}`}>
+              <View className="w-[118px]">
+                <Plaque plaque={plaqueConnue.vehicule.plaque} />
+              </View>
+              <View className="flex-1">
+                <Texte numberOfLines={1} className="font-semibold">
+                  {nomClient(plaqueConnue.client)}
+                </Texte>
+                <Secondaire numberOfLines={1}>{libelleVehicule(plaqueConnue.vehicule)}</Secondaire>
+              </View>
+              <Icone nom="chevron.droite" taille={15} couleur={t.faint} />
+            </Ligne>
+          </Groupe>
+        ) : null}
       </Animated.View>
     );
   }
@@ -89,11 +108,11 @@ export function EtapeClient({
               key={`${f.client.id}-${v?.id ?? 'sans'}`}
               onPress={() => onChoisir(f.client, v)}
               derniere={idx === visibles.length - 1}
-              accessibilityLabel={`${f.client.prenom} ${f.client.nom}, ${v ? `${libelleVehicule(v)}, plaque ${v.plaque}` : 'aucun véhicule'}`}>
+              accessibilityLabel={`${nomClient(f.client)}, ${v ? `${libelleVehicule(v)}, plaque ${v.plaque}` : 'aucun véhicule'}`}>
               <View className="w-[118px]">{v ? <Plaque plaque={v.plaque} /> : <AvatarClient client={f.client} taille={30} />}</View>
               <View className="flex-1">
                 <Texte numberOfLines={1} className="font-semibold">
-                  {f.client.prenom} {f.client.nom}
+                  {nomClient(f.client)}
                 </Texte>
                 <Secondaire numberOfLines={1}>{v ? libelleVehicule(v) : 'Aucun véhicule'}</Secondaire>
               </View>
@@ -104,14 +123,14 @@ export function EtapeClient({
       ) : (
         <Vide
           icone={requete ? 'recherche' : 'clients'}
-          titre={requete ? `Rien pour « ${requete.trim()} »` : 'Aucun client'}
+          titre={requete ? `Rien pour « ${requete.trim()} »` : 'Aucun client'}
         />
       )}
 
       <Bouton
         variante="secondaire"
         icone={<Icone nom="plus" taille={18} />}
-        onPress={() => onNouveau(devinerNom(requete))}
+        onPress={() => onNouveau(valeursDepuisRecherche(requete))}
         className="mt-2">
         Nouveau client
       </Bouton>

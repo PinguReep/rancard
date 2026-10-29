@@ -21,7 +21,11 @@ import { halo, useTheme } from '@/theme/tokens';
 
 const majuscule = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export function Entete({ titre, droite, sansDate }: { titre: string; droite?: ReactNode; sansDate?: boolean }) {
+/**
+ * `date` : jour affiché par l’écran (planning d’un autre jour) ; par défaut
+ * aujourd’hui. La date en tête dit toujours le jour que montre la liste.
+ */
+export function Entete({ titre, droite, sansDate, date }: { titre: string; droite?: ReactNode; sansDate?: boolean; date?: Date }) {
   const router = useRouter();
   const t = useTheme();
   const membre = useMembre();
@@ -31,12 +35,12 @@ export function Entete({ titre, droite, sansDate }: { titre: string; droite?: Re
   return (
     <View className="flex-row items-end justify-between px-5 pb-4 pt-3">
       <View className="flex-1">
-        {sansDate ? null : <Legende className="text-[14px] font-medium">{majuscule(format(new Date(), 'EEEE d MMMM', { locale: fr }))}</Legende>}
+        {sansDate ? null : <Legende className="text-[14px] font-medium">{majuscule(format(date ?? new Date(), 'EEEE d MMMM', { locale: fr }))}</Legende>}
         <Titre className="mt-0.5 text-[34px] leading-[40px]">{titre}</Titre>
       </View>
       <View className="mb-1 flex-row items-center gap-2.5">
         {droite}
-        <BoutonRond nom="cloche" label={nonLues ? `Notifications, ${nonLues} non lues` : 'Notifications'} onPress={() => router.push('/notifications')}>
+        <BoutonRond nom="cloche" label={nonLues ? `Notifications, ${nonLues} non lue${nonLues > 1 ? 's' : ''}` : 'Notifications'} onPress={() => router.push('/notifications')}>
           {nonLues > 0 ? (
             <View
               className="absolute -right-1 -top-1 h-[19px] min-w-[19px] items-center justify-center rounded-full bg-danger px-1 dark:bg-danger-dark"

@@ -4,6 +4,10 @@
  * stockée pour repartir de la donnée à jour après enregistrement ; le retour
  * « Enregistré. » vit dans le composant englobant pour survivre à ce
  * remontage.
+ *
+ * Montant (D2) : modifiable par tout membre qui a « Voir les montants »
+ * (l’écran ne le rend pas sans) ; chaque changement est tracé dans le fil
+ * par le serveur, lisible des seuls membres qui voient les montants.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -130,7 +134,8 @@ export function MontantEstime({ intervention: i, editable, onErreur = () => {} }
         key={i.montantEstime != null ? String(i.montantEstime) : ''}
         intervention={i}
         onErreur={onErreur}
-        aide={enregistre ? 'Enregistré.' : undefined}
+        // D2 : tout membre qui voit les montants les corrige ; le serveur trace chaque changement (J7).
+        aide={enregistre ? 'Enregistré.' : 'Chaque changement est noté dans le fil.'}
         onEnregistre={signalerEnregistre}
       />
     </View>

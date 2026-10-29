@@ -36,12 +36,42 @@ import {
 import Constants from 'expo-constants';
 import { AppState, type AppStateStatus, Platform } from 'react-native';
 
-import type { Consultations, Identifiants, NouveauMembre, NouvelleIntervention, Repo, Snapshot } from '@/data/repo';
+import { AccesRefuse, ReceptionEchouee } from '@/data/erreurs';
+import {
+  AdresseNonConfirmee,
+  type Consultations,
+  type Identifiants,
+  type JetonVoix,
+  type NouveauMembre,
+  type NouvelleInscription,
+  type NouvelleIntervention,
+  type PatchIntervention,
+  type RenvoiReceptionniste,
+  type Repo,
+  type ResultatAnnulation,
+  type Snapshot,
+} from '@/data/repo';
 import { peut, POSTES, TOUTES_PERMISSIONS } from '@/domain/permissions';
-import type { Blocage, Client, Commentaire, Intervention, Membre, Session, Statut, Vehicule } from '@/domain/types';
+import type {
+  Acces,
+  Blocage,
+  CanalAccord,
+  CanalPrevenu,
+  Client,
+  Commentaire,
+  DetailBlocage,
+  EcouteAppel,
+  Intervention,
+  Membre,
+  MotifAnnulation,
+  Session,
+  Statut,
+  Vehicule,
+} from '@/domain/types';
 
 import {
   compacter,
+  detailBlocageVersLigne,
   patchClientVersLigne,
   patchGarageVersLigne,
   patchInterventionVersLigne,
@@ -50,6 +80,8 @@ import {
   versAppel,
   versClient,
   versCommentaire,
+  versDemande,
+  versEcoute,
   versEvenement,
   versGarage,
   versIntervention,
@@ -60,6 +92,8 @@ import {
   type LigneAppel,
   type LigneClient,
   type LigneCommentaire,
+  type LigneDemande,
+  type LigneEcoute,
   type LigneEvenement,
   type LigneGarage,
   type LigneIntervention,
@@ -76,6 +110,9 @@ const PAGE = 1000;
 const DEBOUNCE_MS = 300;
 const BUCKET_PHOTOS = 'photos';
 const DUREE_URL_SIGNEE_S = 60 * 60;
+/** Enregistrements des appels (0018) : URL courte, redemandée à chaque ouverture de la fiche. */
+const BUCKET_AUDIO = 'appels-audio';
+const DUREE_URL_AUDIO_S = 15 * 60;
 const LIEN_REINITIALISATION = 'rencar://reinitialisation';
 
 /** Tables écoutées en temps réel (toutes portent garage_id sauf garages). */
@@ -97,7 +134,8 @@ const TABLES_TEMPS_REEL = [
   'suppressions',
 ] as const;
 
-const COULEURS = ['#2f6bff', '#d92632', '#1f9d55', '#d98b00', '#7c3aed', '#0891b2'];
+// Initiales blanches lisibles (contraste ≥ 4,5:1, WCAG AA) sur chaque couleur.
+const COULEURS = ['#2d66f5', '#d92632', '#1a7f45', '#a86400', '#7c3aed', '#0e7490'];
 
 // ─────────────────────────────────────────────────────────────── Client
 
@@ -122,6 +160,9 @@ export function creerClientSupabase(): SupabaseClient {
 
 type ErreurDistante = { message: string; code?: string | null };
 
+/** Réseau coupé ou serveur injoignable (fonction Edge comprise). */
+const HORS_LIGNE = 'Impossible de joindre le serveur. Vérifiez la connexion.';
+
 /** Erreur Supabase → message lisible en français (les exceptions de nos fonctions SQL le sont déjà). */
 function erreur(e: ErreurDistante): Error {
   const message = e.message ?? 'Erreur inconnue.';
@@ -135,7 +176,7 @@ function erreur(e: ErreurDistante): Error {
     return new Error('Cette adresse n’a pas encore été confirmée.');
   }
   if (/failed to fetch|network request failed|load failed/i.test(message)) {
-    return new Error('Impossible de joindre le serveur. Vérifiez la connexion.');
+    return new Error(HORS_LIGNE);
   }
   if (e.code === '23505') {
     return new Error('Cette valeur existe déjà.');
@@ -153,6 +194,26 @@ function donnees<T>(r: { data: T | null; error: ErreurDistante | null }, absent 
   return r.data;
 }
 
+/**
+ * Refus d’ouverture de session. Un membre désactivé ne lit plus sa propre
+ * ligne (RLS), mais le hook d’authentification (`0003_auth.sql`) écrit
+ * `app_metadata.actif` dans son jeton : c’est la seule trace lisible de la
+ * coupure, on la traduit sans rien demander au serveur.
+ */
+function refusSession(jeton: string | undefined): AccesRefuse {
+  let suspendu = false;
+  try {
+    const charge = jeton?.split('.')[1];
+    if (charge) {
+      const base64 = charge.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(charge.length / 4) * 4, '=');
+      suspendu = (JSON.parse(atob(base64)) as { app_metadata?: { actif?: unknown } }).app_metadata?.actif === false;
+    }
+  } catch {
+    // Jeton illisible : message général.
+  }
+  return new AccesRefuse(suspendu);
+}
+
 // ─────────────────────────────────────────────────────────────── Outils
 
 /** UUID v4 : crypto.randomUUID quand il existe, sinon un tirage au même format (colonnes uuid). */
@@ -165,8 +226,17 @@ function identifiant(): string {
   });
 }
 
-/** Résultat d’un appel de fonction Edge : réponse, ou fonction absente (repli local). */
-type ResultatFonction<T> = { ok: true; donnees: T } | { ok: false; absente: true };
+/**
+ * Résultat d’un appel de fonction Edge : réponse, fonction absente (non
+ * déployée, 404 : repli local) ou injoignable (réseau coupé, relais en
+ * panne : à réessayer, jamais présentée comme une fonction absente).
+ */
+type ResultatFonction<T> = { ok: true; donnees: T } | { ok: false; raison: 'absente' | 'injoignable' };
+
+/** Message d’un appel de fonction qui n’a pas abouti : `absente` pour une fonction non déployée. */
+function messageEchec(r: { raison: 'absente' | 'injoignable' }, absente: string): string {
+  return r.raison === 'injoignable' ? HORS_LIGNE : absente;
+}
 
 function extensionDe(uri: string): string | null {
   const m = /\.([a-z0-9]{2,5})(?:[?#]|$)/i.exec(uri);
@@ -229,6 +299,8 @@ async function pushAutorise(): Promise<boolean> {
 export class SupabaseRepo implements Repo {
   private membre: Membre | null = null;
   private garageId: string | null = null;
+  /** Une demande d’inscription en attente a été vue : sa validation demandera un jeton rafraîchi. */
+  private demandeVue = false;
   private dernier: Snapshot | null = null;
   /** Invitations pas encore acceptées, présentées comme des membres en attente. */
   private invitationsEnAttente = new Set<string>();
@@ -302,37 +374,130 @@ export class SupabaseRepo implements Repo {
       if (message) throw new Error(message);
       if (e.context.status === 404) {
         if (__DEV__) console.warn(`Fonction ${nom} non déployée.`);
-        return { ok: false, absente: true };
+        return { ok: false, raison: 'absente' };
       }
-      throw new Error(`La fonction « ${nom} » a répondu ${e.context.status}.`);
+      throw new Error(`La fonction « ${nom} » a répondu ${e.context.status}.`);
     }
     if (e instanceof FunctionsFetchError || e instanceof FunctionsRelayError) {
       if (__DEV__) console.warn(`Fonction ${nom} injoignable :`, e.message);
-      return { ok: false, absente: true };
+      return { ok: false, raison: 'injoignable' };
     }
     throw erreur(e as ErreurDistante);
   }
 
   // ── Session
 
-  async sessionCourante(): Promise<Session | null> {
+  async sessionCourante(): Promise<Acces | null> {
     const { data, error } = await this.client.auth.getSession();
     if (error || !data.session) return null;
-    return this.ouvrirSession(data.session.user.id);
+    const acces = await this.ouvrirAcces(data.session.user.id);
+    if (acces) return acces;
+    // Session gardée d’un membre coupé (ou retiré), ou demande refusée entre-temps : un jeton frais porte `actif`
+    // (hook d’authentification) ; on ferme la session locale et on dit pourquoi, au lieu d’un écran de connexion muet.
+    const frais = await this.client.auth.refreshSession().catch(() => null);
+    const jeton = frais?.data.session?.access_token ?? data.session.access_token;
+    await this.client.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    throw refusSession(jeton);
   }
 
-  async connecter(id: Identifiants): Promise<Session> {
-    const { data, error } = await this.client.auth.signInWithPassword({
-      email: id.email.trim().toLowerCase(),
-      password: id.motDePasse,
-    });
-    if (error) throw erreur(error);
-    const session = await this.ouvrirSession(data.user.id);
-    if (!session) {
-      await this.client.auth.signOut({ scope: 'local' });
-      throw new Error('Ce compte n’est rattaché à aucun garage actif.');
+  async connecter(id: Identifiants): Promise<Acces> {
+    const email = id.email.trim().toLowerCase();
+    const { data, error } = await this.client.auth.signInWithPassword({ email, password: id.motDePasse });
+    // Compte créé par « Créer un compte » dont le code n’a pas été saisi : l’écran propose de confirmer.
+    if (error && (error.code === 'email_not_confirmed' || /email not confirmed/i.test(error.message))) {
+      throw new AdresseNonConfirmee(email);
     }
-    return session;
+    if (error) throw erreur(error);
+    return this.accesOuDeconnexion(data.user.id, data.session?.access_token);
+  }
+
+  /**
+   * Accès du compte qui vient de s’authentifier ; sans garage ni demande, la
+   * session locale est refermée et le refus dit pourquoi (accès suspendu,
+   * lu dans `jeton`, ou aucun garage actif).
+   */
+  private async accesOuDeconnexion(uid: string, jeton: string | undefined): Promise<Acces> {
+    const acces = await this.ouvrirAcces(uid);
+    if (!acces) {
+      await this.client.auth.signOut({ scope: 'local' });
+      throw refusSession(jeton);
+    }
+    return acces;
+  }
+
+  /**
+   * Garage du membre, sinon demande d’inscription en attente (RPC
+   * `ma_demande`, 0015), sinon null. Une demande que Rencar vient de
+   * valider ouvre le garage : le jeton est d’abord rafraîchi pour porter les
+   * claims du garage (hook d’auth).
+   */
+  private async ouvrirAcces(uid: string): Promise<Acces | null> {
+    const session = await this.ouvrirSession(uid);
+    if (session) return { type: 'session', session };
+    const { data, error } = await this.client.rpc('ma_demande');
+    // Sans la migration 0015 (fonction absente), aucun compte n’est en attente.
+    // Une autre erreur (réseau) remonte : sessionCourante refermerait sinon
+    // la session comme celle d’un compte sans garage.
+    if (error) {
+      if (error.code !== 'PGRST202' && error.code !== '42883') throw erreur(error);
+      if (__DEV__) console.warn('ma_demande :', error.message);
+      return null;
+    }
+    if (!data) return null;
+    this.demandeVue = true;
+    return { type: 'demande', demande: versDemande(data as LigneDemande) };
+  }
+
+  /**
+   * Le mot de passe ne part pas avec la demande : le compte naît avec un mot
+   * de passe aléatoire (fonction `inscription`), et `confirmerInscription`
+   * pose celui de l’utilisateur une fois l’adresse prouvée par le code.
+   */
+  async inscrire(n: NouvelleInscription): Promise<{ codeEnvoye: boolean }> {
+    const r = await this.fonction<{ ok?: boolean; codeEnvoye?: boolean }>('inscription', {
+      email: n.email.trim().toLowerCase(),
+      prenom: n.prenom.trim(),
+      nom: n.nom.trim(),
+      garage: { nom: n.garage.nom.trim(), adresse: n.garage.adresse.trim(), telephone: n.garage.telephone.trim() },
+    });
+    if (!r.ok) throw new Error(messageEchec(r, 'La création de compte n’est pas encore ouverte. Réessayez plus tard.'));
+    return { codeEnvoye: r.donnees?.codeEnvoye !== false };
+  }
+
+  /**
+   * Code reçu après « Créer un compte » : il prouve l’adresse, puis le mot de
+   * passe choisi remplace le mot de passe aléatoire du compte. Personne
+   * d’autre que le titulaire de l’adresse ne fixe donc le mot de passe, même
+   * si un tiers a rempli le formulaire avec la même adresse. Adresse déjà
+   * inscrite : la fonction `inscription` a envoyé un code de réinitialisation
+   * à la place, accepté ici de la même façon.
+   */
+  async confirmerInscription(email: string, code: string, motDePasse: string): Promise<Acces> {
+    const adresse = email.trim().toLowerCase();
+    const token = code.replace(/\D/g, '');
+    let v = await this.client.auth.verifyOtp({ email: adresse, token, type: 'signup' });
+    if (v.error || !v.data.user) v = await this.client.auth.verifyOtp({ email: adresse, token, type: 'recovery' });
+    if (v.error || !v.data.user) throw new Error('Code invalide ou expiré. Demandez un nouveau code.');
+    const maj = await this.client.auth.updateUser({ password: motDePasse });
+    // Compte d’avant ce changement (mot de passe déjà le sien) : GoTrue refuse le même mot de passe.
+    if (maj.error && maj.error.code !== 'same_password') {
+      await this.client.auth.signOut({ scope: 'local' });
+      throw new Error('Votre adresse est confirmée, mais le mot de passe n’a pas été enregistré. Touchez « Mot de passe oublié » pour en choisir un.');
+    }
+    return this.accesOuDeconnexion(v.data.user.id, v.data.session?.access_token);
+  }
+
+  async renvoyerCodeInscription(email: string): Promise<void> {
+    const adresse = email.trim().toLowerCase();
+    const { error } = await this.client.auth.resend({ type: 'signup', email: adresse });
+    if (!error) return;
+    if (error.status === 429 || /security purposes|rate limit/i.test(error.message)) {
+      throw new Error('Patientez une minute avant de demander un nouveau code.');
+    }
+    // Adresse déjà inscrite et confirmée : le nouveau code est celui de la réinitialisation.
+    const reinit = await this.client.auth.resetPasswordForEmail(adresse, { redirectTo: LIEN_REINITIALISATION });
+    if (!reinit.error) return;
+    throw erreur(error);
   }
 
   async connecterDemo(): Promise<Session> {
@@ -348,6 +513,7 @@ export class SupabaseRepo implements Repo {
     this.membre = null;
     this.garageId = null;
     this.dernier = null;
+    this.demandeVue = false;
     this.oublierPresence();
   }
 
@@ -358,11 +524,11 @@ export class SupabaseRepo implements Repo {
     if (error) throw erreur(error);
   }
 
-  async reinitialiserMotDePasse(email: string, code: string, motDePasse: string): Promise<Session> {
+  async reinitialiserMotDePasse(email: string, code: string, motDePasse: string): Promise<Acces> {
     return this.validerCode(email, code, 'recovery', motDePasse);
   }
 
-  async activerCompte(email: string, code: string, motDePasse: string): Promise<Session> {
+  async activerCompte(email: string, code: string, motDePasse: string): Promise<Acces> {
     return this.validerCode(email, code, 'invite', motDePasse);
   }
 
@@ -372,7 +538,7 @@ export class SupabaseRepo implements Repo {
    * consommé par un antivirus. Le code ouvre une session, puis le mot de
    * passe choisi la remplace.
    */
-  private async validerCode(email: string, code: string, type: 'invite' | 'recovery', motDePasse: string): Promise<Session> {
+  private async validerCode(email: string, code: string, type: 'invite' | 'recovery', motDePasse: string): Promise<Acces> {
     const { data, error } = await this.client.auth.verifyOtp({
       email: email.trim().toLowerCase(),
       token: code.replace(/\D/g, ''),
@@ -381,12 +547,7 @@ export class SupabaseRepo implements Repo {
     if (error || !data.user) throw new Error('Code invalide ou expiré. Demandez un nouvel e-mail.');
     const maj = await this.client.auth.updateUser({ password: motDePasse });
     if (maj.error) throw erreur(maj.error);
-    const session = await this.ouvrirSession(data.user.id);
-    if (!session) {
-      await this.client.auth.signOut({ scope: 'local' });
-      throw new Error('Ce compte n’est rattaché à aucun garage actif.');
-    }
-    return session;
+    return this.accesOuDeconnexion(data.user.id, data.session?.access_token);
   }
 
   async changerMotDePasse(actuel: string, nouveau: string): Promise<void> {
@@ -399,8 +560,19 @@ export class SupabaseRepo implements Repo {
     if (error) throw erreur(error);
   }
 
-  async supprimerMonCompte(): Promise<void> {
-    sansErreur(await this.client.rpc('supprimer_mon_compte'));
+  /**
+   * Membre ou compte en attente : `supprimer_mon_compte` (0003, étendue en
+   * 0015) supprime aussi la demande. Le dernier gérant supprime aussi le
+   * garage : rien n’est effacé ici avant la décision du serveur (un refus
+   * laisserait le garage sans ses photos) ; les fichiers du garage sont
+   * effacés par la purge de la nuit (stockage_a_purger, fonction ecoute-purge).
+   */
+  async supprimerMonCompte(o?: { avecGarage?: boolean }): Promise<void> {
+    if (o?.avecGarage) {
+      sansErreur(await this.client.rpc('supprimer_mon_compte', { p_supprimer_garage: true }));
+    } else {
+      sansErreur(await this.client.rpc('supprimer_mon_compte'));
+    }
     this.fermerCanal();
     this.fermerPresence();
     // L’utilisateur n’existe plus côté serveur : on efface seulement la session locale.
@@ -408,6 +580,7 @@ export class SupabaseRepo implements Repo {
     this.membre = null;
     this.garageId = null;
     this.dernier = null;
+    this.demandeVue = false;
     this.oublierPresence();
   }
 
@@ -475,13 +648,42 @@ export class SupabaseRepo implements Repo {
     this.premierPlanDepuis = AppState.currentState === 'active' ? Date.now() : null;
   }
 
+  /**
+   * Le jeton de la session porte-t-il le claim garage_id (hook d’auth, 0003) ?
+   * Un jeton émis pendant que la demande était en attente ne l’a pas. Illisible :
+   * considéré comme bon (rien à rafraîchir).
+   */
+  private async jetonPorteLeGarage(): Promise<boolean> {
+    try {
+      const { data } = await this.client.auth.getSession();
+      const jeton = data.session?.access_token;
+      if (!jeton) return true;
+      const charge = jeton.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const claims = JSON.parse(atob(charge.padEnd(Math.ceil(charge.length / 4) * 4, '='))) as {
+        app_metadata?: { garage_id?: unknown };
+      };
+      return typeof claims.app_metadata?.garage_id === 'string';
+    } catch {
+      return true;
+    }
+  }
+
   /** Lit membres puis garages ; null si le membre n’existe pas ou n’est plus actif (masqué par la RLS). */
   private async ouvrirSession(uid: string): Promise<Session | null> {
-    const m = donnees<LigneMembre | null>(
-      await this.client.from('membres').select('*').eq('id', uid).maybeSingle(),
-      'Membre introuvable.',
-    );
+    // Pas `donnees()` ici : il lèverait « Membre introuvable. » sur une ligne
+    // masquée, et l’appelant ne pourrait plus dire « accès suspendu ».
+    const lu = await this.client.from('membres').select('*').eq('id', uid).maybeSingle();
+    if (lu.error) throw erreur(lu.error);
+    const m = lu.data as LigneMembre | null;
     if (!m) return null;
+    if (this.demandeVue || !(await this.jetonPorteLeGarage())) {
+      // Demande validée par Rencar pendant la session : le jeton d’avant n’a pas
+      // les claims du garage (hook d’auth). La RLS lit la table, mais le jeton
+      // rafraîchi garde tout cohérent (temps réel, fonctions Edge).
+      const { error } = await this.client.auth.refreshSession();
+      if (error && __DEV__) console.warn('Jeton non rafraîchi :', error.message);
+      this.demandeVue = false;
+    }
     const g = donnees<LigneGarage>(await this.client.from('garages').select('*').eq('id', m.garage_id).single());
     let membre = versMembre(m);
     if (m.invitation_en_attente) {
@@ -750,24 +952,57 @@ export class SupabaseRepo implements Repo {
       prioritaire: Boolean(n.prioritaire),
       debut: n.debut,
       duree_min: n.dureeMin,
+      restitution_prevue: n.restitutionPrevue ?? null,
       memo: n.memo ?? null,
       montant_estime: n.montantEstime ?? null,
+      // Le trigger de 0014 reporte un relevé plus récent sur le véhicule (J12).
+      km_depot: n.kmDepot ?? null,
     };
     // Sans RETURNING : soumis à la policy de lecture, et montant_estime n’y est pas lisible.
     sansErreur(await this.client.from('interventions').insert(ligne));
     const s = await this.recharger();
     const cree = s.interventions.find((i) => i.id === id);
     if (!cree) throw new Error('Intervention créée mais introuvable au rechargement.');
-    return cree;
+    if (!n.dejaAuGarage) return cree;
+    // « Déjà au garage » : la réception est une seconde écriture (J13 puis J1). La
+    // fiche existe quoi qu’il arrive : l’écran la retrouve dans l’erreur.
+    try {
+      await this.changerStatut(id, 'recu');
+    } catch (e) {
+      throw new ReceptionEchouee(cree, e);
+    }
+    return (await this.instantane()).interventions.find((i) => i.id === id) ?? cree;
   }
 
-  async changerStatut(id: string, vers: Statut): Promise<void> {
-    sansErreur(await this.client.from('interventions').update({ statut: vers }).eq('id', id));
+  /**
+   * Une seule écriture. Avec `motif` : annulation (P3) ; avec `debut` :
+   * reprogrammation d’une fiche annulée (J1 puis J9 côté serveur). Les refus
+   * R1 à R4 du trigger « avant » arrivent tels quels à l’écran.
+   */
+  async changerStatut(
+    id: string,
+    vers: Statut,
+    _auteurId?: string,
+    o?: { motif?: MotifAnnulation; debut?: string; dureeMin?: number },
+  ): Promise<void> {
+    const ligne = compacter({
+      statut: vers,
+      annulation_motif: vers === 'annule' ? (o?.motif ?? null) : undefined,
+      debut: o?.debut,
+      duree_min: o?.dureeMin,
+    });
+    sansErreur(await this.client.from('interventions').update(ligne).eq('id', id));
     await this.recharger();
   }
 
-  async changerBlocage(id: string, vers: Blocage | null): Promise<void> {
-    sansErreur(await this.client.from('interventions').update({ blocage: vers }).eq('id', id));
+  /**
+   * Pose, précision ou levée en une écriture. Sans `detail`, seules les
+   * colonnes de blocage changent : le trigger efface le détail d’un blocage
+   * remplacé ou levé, et une précision n’est jamais effacée par mégarde.
+   */
+  async changerBlocage(id: string, vers: Blocage | null, _auteurId?: string, detail?: DetailBlocage): Promise<void> {
+    const ligne = { blocage: vers, ...(detail ? detailBlocageVersLigne(detail) : {}) };
+    sansErreur(await this.client.from('interventions').update(ligne).eq('id', id));
     await this.recharger();
   }
 
@@ -776,10 +1011,65 @@ export class SupabaseRepo implements Repo {
     await this.recharger();
   }
 
-  async modifierIntervention(id: string, patch: Parameters<Repo['modifierIntervention']>[1]): Promise<void> {
+  async modifierIntervention(id: string, patch: PatchIntervention): Promise<void> {
     const ligne = patchInterventionVersLigne(patch);
     if (!Object.keys(ligne).length) return;
     sansErreur(await this.client.from('interventions').update(ligne).eq('id', id));
+    await this.recharger();
+  }
+
+  // ── v2c : accord, client prévenu, devis, « Annuler », retrait d’une note
+
+  /** RPC `noter_accord` (J6) : seule façon de lever une attente d’accord ; montant ignoré sans voirPrix. */
+  async noterAccord(id: string, a: { de: string; canal: CanalAccord; montant?: number }): Promise<void> {
+    sansErreur(
+      await this.client.rpc('noter_accord', {
+        p_intervention: id,
+        p_de: a.de,
+        p_canal: a.canal,
+        p_montant: a.montant ?? null,
+      }),
+    );
+    await this.recharger();
+  }
+
+  /** Le serveur date et signe (`prevenu_le`, `prevenu_par`) ; refus R6 hors « Véhicule prêt ». */
+  async marquerPrevenu(id: string, canal: CanalPrevenu): Promise<void> {
+    sansErreur(await this.client.from('interventions').update({ prevenu_canal: canal }).eq('id', id));
+    await this.recharger();
+  }
+
+  /** L’heure envoyée est remplacée par celle du serveur ; refus R13 hors attente d’accord. */
+  async marquerDevisEnvoye(id: string): Promise<void> {
+    sansErreur(
+      await this.client.from('interventions').update({ devis_envoye_le: new Date().toISOString() }).eq('id', id),
+    );
+    await this.recharger();
+  }
+
+  /** RPC `annuler_dernier_changement` (J14) ; ses refus arrivent tels quels à l’écran. */
+  async annulerDernierChangement(id: string, _auteurId?: string, evenementId?: string): Promise<ResultatAnnulation> {
+    // Lié à l’événement que nomme l’avis (J14) : un geste fait entre-temps n’est jamais défait à sa place.
+    const r = donnees<{ statut: Statut; blocage: Blocage | null; sms_parti: boolean }>(
+      await this.client.rpc('annuler_dernier_changement', { p_intervention: id, p_evenement: evenementId ?? null }),
+      'Rien à annuler.',
+    );
+    await this.recharger();
+    return { statut: r.statut, blocage: r.blocage ?? null, smsParti: Boolean(r.sms_parti) };
+  }
+
+  /**
+   * Retire une note de la page du client (P1). La RLS (auteur ou gérant)
+   * filtre en silence : 0 ligne touchée, on le dit. Le trigger de 0014 date
+   * et signe le retrait, et refuse R7 (trop tard) et R8 (note automatique).
+   */
+  async retirerNote(commentaireId: string): Promise<void> {
+    const { count, error } = await this.client
+      .from('commentaires')
+      .update({ visible_client: false }, { count: 'exact' })
+      .eq('id', commentaireId);
+    if (error) throw erreur(error);
+    if (!count) throw new Error('Seul l’auteur de la note ou un gérant peut la retirer.');
     await this.recharger();
   }
 
@@ -826,7 +1116,7 @@ export class SupabaseRepo implements Repo {
     const contentType = reponse.headers.get('content-type') ?? TYPES_MIME[extension] ?? 'application/octet-stream';
     const chemin = `${this.gid}/${interventionId}/${identifiant()}.${extension}`;
     const { error } = await this.client.storage.from(BUCKET_PHOTOS).upload(chemin, contenu, { contentType, upsert: false });
-    if (error) throw new Error(`Envoi de la photo impossible : ${error.message}`);
+    if (error) throw new Error(`Envoi de la photo impossible : ${error.message}`);
     return chemin;
   }
 
@@ -837,7 +1127,13 @@ export class SupabaseRepo implements Repo {
     // absente ou injoignable : aucun SMS n’est parti, on le dit plutôt que de
     // journaliser un envoi qui n’a pas eu lieu.
     const r = await this.fonction('sms', { intervention_id: interventionId, type: 'pret', texte });
-    if (!r.ok) throw new Error('Le SMS n’a pas pu être envoyé : service indisponible, réessayez dans un instant.');
+    if (!r.ok) {
+      throw new Error(
+        r.raison === 'injoignable'
+          ? 'Le SMS n’est pas parti : impossible de joindre le serveur. Vérifiez la connexion.'
+          : 'Le SMS n’a pas pu être envoyé : service indisponible, réessayez dans un instant.',
+      );
+    }
     await this.recharger();
   }
 
@@ -920,7 +1216,7 @@ export class SupabaseRepo implements Repo {
     if (error) throw erreur(error);
     if (!count) {
       throw new Error(
-        'Cette fiche n’est plus à valider, ou elle n’est pas visible pour vous : demandez la permission « Voir tout le planning ».',
+        'Cette fiche n’est plus à valider, ou elle n’est pas visible pour vous : demandez la permission « Voir tout le planning ».',
       );
     }
   }
@@ -943,6 +1239,52 @@ export class SupabaseRepo implements Repo {
   async lierAppel(appelId: string, interventionId: string): Promise<void> {
     sansErreur(await this.client.from('appels').update({ intervention_id: interventionId }).eq('id', appelId));
     await this.recharger();
+  }
+
+  async renvoiReceptionniste(): Promise<RenvoiReceptionniste | null> {
+    // Fonction de 0017 : garage tiré de la fiche du membre connecté, gérant
+    // ou permission appels ; aucune ligne sinon (ou sans numéro attribué).
+    const r = await this.client.rpc('renvoi_receptionniste');
+    if (r.error) {
+      // Projet sans 0017 : fonction absente (PGRST202 côté PostgREST, 42883 côté Postgres).
+      if (r.error.code === 'PGRST202' || r.error.code === '42883') {
+        throw new Error('Numéro indisponible pour le moment : la mise à jour du serveur n’est pas encore installée.');
+      }
+      throw erreur(r.error);
+    }
+    const ligne = (Array.isArray(r.data) ? r.data[0] : r.data) as
+      | { numero_ia?: string | null; dernier_appel_le?: string | null }
+      | null
+      | undefined;
+    if (!ligne?.numero_ia) return null;
+    return { numero: ligne.numero_ia, dernierAppelLe: ligne.dernier_appel_le ?? null };
+  }
+
+  /**
+   * Conversation de l'appel (0018) : la ligne d'écoute, que la RLS ne rend
+   * qu'à un membre avec la permission appels, avant l'échéance et tant que
+   * le réceptionniste est actif ; puis l'URL signée de l'audio (15 minutes,
+   * même règle côté Storage). Table absente (0018 pas encore appliquée) :
+   * rien à réécouter. Signature refusée : audio indisponible, le fil reste.
+   */
+  async ecouteAppel(appelId: string): Promise<EcouteAppel | null> {
+    const { data, error } = await this.client
+      .from('appels_ecoutes')
+      .select('repliques, audio_etat, audio_chemin, expire_le, cree_le')
+      .eq('appel_id', appelId)
+      .maybeSingle();
+    if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01') return null;
+      throw erreur(error);
+    }
+    if (!data) return null;
+    const ligne = data as LigneEcoute;
+    let uri: string | null = null;
+    if (ligne.audio_etat === 'pret' && ligne.audio_chemin) {
+      const signee = await this.client.storage.from(BUCKET_AUDIO).createSignedUrl(ligne.audio_chemin, DUREE_URL_AUDIO_S);
+      uri = signee.data?.signedUrl ?? null;
+    }
+    return versEcoute(ligne, uri);
   }
 
   // ── Notifications
@@ -986,6 +1328,48 @@ export class SupabaseRepo implements Repo {
           { onConflict: 'jeton' },
         ),
     );
+  }
+
+  // ── Sonnerie dans l’app (0016) : table appareils_voix (RLS : les siens), fonction Edge voix
+
+  async sonnerieInscrite(appareil: string): Promise<boolean> {
+    const { data, error } = await this.client
+      .from('appareils_voix')
+      .select('id')
+      .eq('membre_id', this.moi.id)
+      .eq('appareil', appareil)
+      .maybeSingle();
+    if (error) throw erreur(error);
+    return Boolean(data);
+  }
+
+  async inscrireSonnerie(appareil: string): Promise<void> {
+    // inscrit_le est posé par le serveur ; sans RETURNING (policy de lecture).
+    sansErreur(
+      await this.client
+        .from('appareils_voix')
+        .upsert(
+          { garage_id: this.gid, membre_id: this.moi.id, appareil, plateforme: plateforme() },
+          { onConflict: 'membre_id,appareil' },
+        ),
+    );
+  }
+
+  async retirerSonnerie(appareil: string): Promise<void> {
+    sansErreur(await this.client.from('appareils_voix').delete().eq('membre_id', this.moi.id).eq('appareil', appareil));
+  }
+
+  async jetonVoix(): Promise<JetonVoix | null> {
+    const r = await this.fonction<{ jeton?: unknown; identite?: unknown; expire_le?: unknown }>('voix/jeton', {});
+    if (!r.ok) throw new Error(messageEchec(r, 'La sonnerie n’est pas encore branchée pour ce garage.'));
+    const { jeton, identite, expire_le } = r.donnees ?? {};
+    if (typeof jeton !== 'string' || typeof identite !== 'string') throw new Error('Réponse inattendue du serveur.');
+    return { jeton, identite, expireLe: typeof expire_le === 'string' ? expire_le : '' };
+  }
+
+  async testerSonnerie(): Promise<void> {
+    const r = await this.fonction('voix/essai', {});
+    if (!r.ok) throw new Error(messageEchec(r, 'La sonnerie n’est pas encore branchée pour ce garage.'));
   }
 
   // ── Équipe et réglages (gérant)
@@ -1062,7 +1446,7 @@ export class SupabaseRepo implements Repo {
       // options en base, clés réservées comprises, même celles que l'app ne
       // connaît pas (agent, VoIP…) : les renvoyer incomplètes serait refusé.
       const { options } = donnees(await this.client.from('garages').select('options').eq('id', this.gid).single<Pick<LigneGarage, 'options'>>());
-      ligne.options = { ...options, smsAutomatique: patch.options.smsAutomatique ?? options.smsAutomatique };
+      ligne.options = { ...options, smsAutomatique: patch.options.smsAutomatique ?? options?.smsAutomatique === true };
     }
     sansErreur(await this.client.from('garages').update(ligne).eq('id', this.gid));
     await this.recharger();

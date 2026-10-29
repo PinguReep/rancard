@@ -1,6 +1,12 @@
 /**
  * Mon compte : identité, e-mail de connexion, mot de passe, suppression du
  * compte avec double confirmation (feuille puis saisie de « SUPPRIMER »).
+ *
+ * Le dernier gérant du garage (aucun autre gérant actif ayant rejoint
+ * l'équipe) peut aussi supprimer son compte (App Store 5.1.1(v)) : le garage,
+ * toutes ses données et les comptes de l'équipe partent avec lui. La
+ * feuille dit ce qui sera perdu, chiffres à l'appui, et rappelle qu'on peut
+ * d'abord nommer un autre gérant.
  */
 
 import { Stack } from 'expo-router';
@@ -14,16 +20,48 @@ import { LigneNavigation } from '@/components/profil/LigneNavigation';
 import { useMembreCourant } from '@/components/profil/useMembreCourant';
 import { Bouton, Carte, Champ, Ecran, Erreur, FeuilleConfirmation, Groupe, Legende, Ligne, Secondaire, Section, SousTitre, impulsion } from '@/components/ui';
 import { BACKEND, repo } from '@/data';
+import { estGerant } from '@/domain/permissions';
 import { ecrire } from '@/lib/ecrire';
-import { useSession } from '@/state/session';
+import { activerSonnerie, quitterSonnerie, synchroniserSonnerie, useTelephone } from '@/lib/sonnerie';
+import { useDonnees, usePermissions, useSession } from '@/state/session';
 
 const MOT_CLE = 'SUPPRIMER';
+
+/** « 1 intervention », « 12 interventions » */
+function nombre(n: number, singulier: string, pluriel = `${singulier}s`): string {
+  return `${n} ${n > 1 ? pluriel : singulier}`;
+}
 
 export default function MonCompte() {
   const insets = useSafeAreaInsets();
   const moi = useMembreCourant();
+  const p = usePermissions();
   const deconnecter = useSession((s) => s.deconnecter);
   const [avis, montrerAvis] = useAvis();
+
+  // Ce que la suppression du dernier gérant emporte (mêmes règles que supprimer_mon_compte, 0015).
+  const garage = useDonnees((s) => s.garage);
+  const membres = useDonnees((s) => s.membres);
+  const nbInterventions = useDonnees((s) => s.interventions.length);
+  const nbClients = useDonnees((s) => s.clients.length);
+  const nbAppels = useDonnees((s) => s.appels.length);
+  const dernierGerant =
+    estGerant(moi) && !membres.some((m) => m.id !== moi.id && m.role === 'gerant' && m.actif && !m.invitationEnAttente);
+  // Tous les comptes de l’équipe partent avec le garage, accès coupé compris (supprimer_garage, 0015) ;
+  // une invitation en attente n’a pas encore de compte, elle est effacée avec lui.
+  const autres = membres.filter((m) => m.id !== moi.id && !m.invitationEnAttente);
+  const autresMembres = autres.length;
+  const sansAcces = autres.filter((m) => !m.actif).length;
+  const invitations = membres.filter((m) => m.id !== moi.id && m.invitationEnAttente).length;
+  const precisionAcces = !sansAcces ? '' : autresMembres > 1 ? ` (dont ${sansAcces} sans accès)` : ' (accès coupé)';
+  const perdu = [
+    nombre(nbInterventions, 'intervention'),
+    `${nombre(nbClients, 'client')} et leurs véhicules`,
+    'les photos',
+    ...(nbAppels ? [nombre(nbAppels, 'appel')] : []),
+    ...(autresMembres ? [`le compte ${autresMembres > 1 ? `des ${autresMembres} autres membres` : 'de l’autre membre'} de l’équipe${precisionAcces}`] : []),
+    ...(invitations ? [`${nombre(invitations, 'invitation')} en attente`] : []),
+  ].join(', ');
 
   const [prenom, setPrenom] = useState(moi.prenom);
   const [nom, setNom] = useState(moi.nom);
@@ -106,14 +144,21 @@ export default function MonCompte() {
     if (saisie.trim().toUpperCase() !== MOT_CLE) return;
     setSuppression(true);
     setErreurSuppression(null);
+    // Sonnerie (0016) : désinscription de ce téléphone tant que le compte existe encore (après,
+    // Twilio ne pourrait plus être prévenu). Si le serveur refuse la suppression, le réglage revient.
+    const sonnaitIci = useTelephone.getState().inscription === 'active';
+    await quitterSonnerie();
     try {
-      await repo().supprimerMonCompte();
-      await deconnecter();
+      await repo().supprimerMonCompte({ avecGarage: dernierGerant });
     } catch (e) {
       setErreurSuppression((e as Error).message);
       setSuppression(false);
       impulsion('erreur');
+      if (sonnaitIci) void activerSonnerie(moi.id);
+      else void synchroniserSonnerie({ membreId: moi.id, eligible: garage.options.receptionniste && p.appels && moi.actif });
+      return;
     }
+    await deconnecter();
   }
 
   return (
@@ -184,14 +229,29 @@ export default function MonCompte() {
           </Section>
         )}
 
-        <Groupe titre="Zone sensible" note="La suppression est définitive : votre accès au garage est retiré et vous êtes déconnecté.">
-          <LigneNavigation titre="Supprimer mon compte" ton="danger" onPress={() => setFeuille(true)} derniere />
+        <Groupe
+          titre="Zone sensible"
+          note={
+            dernierGerant
+              ? `Vous êtes le seul gérant de « ${garage.nom} » : supprimer votre compte supprime aussi le garage et toutes ses données, définitivement. Pour garder le garage, nommez d’abord un autre gérant dans Équipe.`
+              : 'La suppression est définitive : votre accès au garage est retiré et vous êtes déconnecté.'
+          }>
+          <LigneNavigation
+            titre={dernierGerant ? 'Supprimer mon compte et le garage' : 'Supprimer mon compte'}
+            ton="danger"
+            onPress={() => setFeuille(true)}
+            derniere
+          />
         </Groupe>
 
         {zoneOuverte ? (
           <Carte className="border-danger p-4 dark:border-danger-dark">
             <SousTitre>Dernière étape</SousTitre>
-            <Secondaire className="mb-4 mt-1">Tapez {MOT_CLE} pour confirmer la suppression de votre compte.</Secondaire>
+            <Secondaire className="mb-4 mt-1">
+              {dernierGerant
+                ? `Tapez ${MOT_CLE} pour supprimer votre compte, le garage et toutes ses données.`
+                : `Tapez ${MOT_CLE} pour confirmer la suppression de votre compte.`}
+            </Secondaire>
             <Champ
               ref={champSaisie}
               libelle={`Tapez ${MOT_CLE}`}
@@ -224,8 +284,12 @@ export default function MonCompte() {
       <FeuilleConfirmation
         ouverte={feuille}
         onFermer={() => setFeuille(false)}
-        titre="Supprimer votre compte ?"
-        texte="Votre accès au garage est retiré immédiatement et vous êtes déconnecté. Une dernière confirmation vous sera demandée."
+        titre={dernierGerant ? 'Supprimer votre compte et le garage ?' : 'Supprimer votre compte ?'}
+        texte={
+          dernierGerant
+            ? `Seront supprimés définitivement : le garage « ${garage.nom} », ${perdu}. Rien ne pourra être récupéré. Une dernière confirmation vous sera demandée.`
+            : 'Votre accès au garage est retiré immédiatement et vous êtes déconnecté. Une dernière confirmation vous sera demandée.'
+        }
         libelle="Continuer"
         variante="danger"
         onConfirmer={() => {

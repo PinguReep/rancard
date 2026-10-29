@@ -6,6 +6,8 @@
  *
  * Contrastes (WCAG AA, texte ≥ 4,5:1) vérifiés sur les fonds « soft » et sur
  * le fond d’écran pour les couleurs « sens » (accent, ok, warn, danger, muted).
+ * `faint` (texte discret, frise, chevrons) atteint aussi 4,5:1, en clair comme
+ * en sombre, sur bg, surface, surface2, mutedSoft et accentSoft.
  * En sombre, `accent` sert au texte et aux liens ; `accentFond` porte le blanc
  * des boutons pleins (le même bleu ne peut pas faire les deux).
  */
@@ -44,7 +46,7 @@ export const palette: Record<'light' | 'dark', Palette> = {
     ink: '#111114',
     muted: '#606068',
     mutedSoft: '#f0f0f3',
-    faint: '#a0a0a8',
+    faint: '#6b6b73',
     accent: '#2559e0',
     accentFond: '#2559e0',
     accentSoft: '#e8efff',
@@ -66,7 +68,7 @@ export const palette: Record<'light' | 'dark', Palette> = {
     ink: '#eef1f6',
     muted: '#8b94a5',
     mutedSoft: '#1a1f29',
-    faint: '#5b6474',
+    faint: '#7f8899',
     accent: '#6a9bff',
     accentFond: '#3568f5',
     accentSoft: '#14203a',
@@ -84,6 +86,34 @@ export const palette: Record<'light' | 'dark', Palette> = {
 export function useTheme(): Palette & { scheme: 'light' | 'dark' } {
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   return { ...palette[scheme], scheme };
+}
+
+/** Luminance relative d’une couleur « #rrggbb » (WCAG 2.x). */
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1, 7), 16);
+  const canal = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * canal((n >> 16) & 255) + 0.7152 * canal((n >> 8) & 255) + 0.0722 * canal(n & 255);
+}
+
+/**
+ * Fond d’un avatar sous des initiales blanches : la couleur du membre, assombrie
+ * juste assez pour un contraste d’au moins 4,5:1 (WCAG AA). Une couleur déjà
+ * lisible est rendue telle quelle ; une couleur illisible (saisie ancienne,
+ * autre palette) ne laisse jamais les initiales pâles.
+ */
+export function fondAvatar(couleur: string): string {
+  if (!/^#[0-9a-f]{6}$/i.test(couleur)) return couleur;
+  const n = parseInt(couleur.slice(1), 16);
+  const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  for (let k = 0; k <= 20; k += 1) {
+    const f = 1 - k * 0.05;
+    const hex = `#${rgb.map((c) => Math.round(c * f).toString(16).padStart(2, '0')).join('')}`;
+    if (1.05 / (luminance(hex) + 0.05) >= 4.5) return hex;
+  }
+  return '#000000';
 }
 
 export const radius = { sm: 8, md: 12, lg: 14, xl: 22, xxl: 28 } as const;

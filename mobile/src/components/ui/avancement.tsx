@@ -36,14 +36,25 @@ function couleurs(i: Pick<Intervention, 'statut' | 'blocage'>) {
   return { bloquee: i.blocage !== null && i.statut !== 'livre' && i.statut !== 'annule', pret: i.statut === 'termine' || i.statut === 'livre' };
 }
 
-/** Quatre segments fins ; l'étape en cours brille. */
-export function PisteAvancement({ intervention: i }: { intervention: Pick<Intervention, 'statut' | 'blocage'> }) {
+/** Largeur de la piste compacte (carte qui porte un bouton de geste, v2c). */
+export const LARGEUR_PISTE_COMPACTE = 72;
+
+/**
+ * Quatre segments fins ; l'étape en cours brille. `compacte` : largeur fixe
+ * de 72 pt, pour laisser la place au mot d’état et au bouton de geste sur
+ * la même ligne de la carte.
+ */
+export function PisteAvancement({ intervention: i, compacte }: { intervention: Pick<Intervention, 'statut' | 'blocage'>; compacte?: boolean }) {
   const t = useTheme();
   const ici = etapeDe(i.statut);
   const { bloquee, pret } = couleurs(i);
   const vive = bloquee ? t.warn : pret ? t.ok : t.accent;
   return (
-    <View className="flex-1 flex-row gap-1" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <View
+      className={compacte ? 'flex-row gap-1' : 'flex-1 flex-row gap-1'}
+      style={compacte ? { width: LARGEUR_PISTE_COMPACTE } : undefined}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants">
       {ETAPES.map((nom, k) => {
         const etat: Etat = k < ici ? 'fait' : k === ici ? 'ici' : 'avenir';
         const fond = etat === 'avenir' ? t.line : etat === 'fait' ? (pret ? t.ok : t.accentFond) : vive;
@@ -66,7 +77,7 @@ export function Frise({ intervention: i }: { intervention: Pick<Intervention, 's
   const { bloquee, pret } = couleurs(i);
   const vive = bloquee ? t.warn : pret ? t.ok : t.accent;
   const plein = pret ? t.ok : t.accentFond;
-  const libelle = ici < 0 ? 'Véhicule pas encore reçu' : `Étape ${ici + 1} sur 4 : ${ETAPES[ici]}${bloquee ? ', bloquée' : ''}`;
+  const libelle = ici < 0 ? 'Véhicule pas encore reçu' : `Étape ${ici + 1} sur 4 : ${ETAPES[ici]}${bloquee ? ', bloquée' : ''}`;
 
   return (
     <View accessible accessibilityLabel={libelle} className="mt-6 px-3">

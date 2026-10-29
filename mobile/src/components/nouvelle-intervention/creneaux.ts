@@ -101,3 +101,59 @@ export function premierCreneauLibre(jour: Date, horaires: Garage['horaires'], ma
 export function premierJourDisponible(jours: Jour[], horaires: Garage['horaires'], maintenant = new Date()): Jour | undefined {
   return jours.find((j) => !j.ferme && premierCreneauLibre(j.date, horaires, maintenant));
 }
+
+// ── v2c (E5) : ajouts seulement, les signatures ci-dessus ne changent pas.
+
+/** Clé « yyyy-MM-dd » d'un jour (heure locale). */
+export const cleJour = (d: Date) => cleDe(d);
+
+/** Jour (minuit, heure locale) d'une clé « yyyy-MM-dd » ; invalide : aujourd'hui. */
+export function jourDeCle(cle: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cle);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : startOfDay(new Date());
+}
+
+/**
+ * Arrivée d'une voiture « Déjà au garage » : l'heure réelle, arrondie au
+ * quart d'heure inférieur (10:52 → 10:45). Jamais un créneau à venir.
+ */
+export function arriveeMaintenant(maintenant = new Date()): string {
+  const d = new Date(maintenant);
+  d.setMinutes(d.getMinutes() - (d.getMinutes() % 15), 0, 0);
+  return d.toISOString();
+}
+
+/** ISO d'un jour à « HH:mm » (heure locale). */
+export const aHeureIso = (jour: Date, hm: string) => aHeure(jour, hm).toISOString();
+
+/** Fermeture d'un jour (ISO), ou null s'il est fermé. */
+export function fermetureDu(horaires: Garage['horaires'], jour: Date): string | null {
+  const h = plageDuJour(horaires, jour);
+  return h ? aHeureIso(jour, h.a) : null;
+}
+
+/** Premier jour ouvert strictement après `jour` (deux semaines au plus), à minuit. */
+export function jourOuvertSuivant(horaires: Garage['horaires'], jour: Date): Date | null {
+  for (let k = 1; k <= 14; k++) {
+    const d = addDays(startOfDay(jour), k);
+    if (plageDuJour(horaires, d)) return d;
+  }
+  return null;
+}
+
+/**
+ * Heures libres d'un jour pour le retour prévu : 12:00, 14:00, 17:00 et la
+ * fermeture, dans la plage d'ouverture (ou la plage par défaut) et
+ * strictement après `apres` (l'arrivée de la voiture, ou maintenant).
+ */
+export function heuresRetour(horaires: Garage['horaires'], jour: Date, apres: Date): string[] {
+  const h = plageDuJour(horaires, jour);
+  if (!h) return [];
+  const de = aHeure(jour, h.de);
+  const a = aHeure(jour, h.a);
+  return [...new Set(['12:00', '14:00', '17:00', h.a])]
+    .map((hm) => ({ hm, d: aHeure(jour, hm) }))
+    .filter(({ d }) => d >= de && d <= a && d > apres)
+    .sort((x, y) => x.d.getTime() - y.d.getTime())
+    .map(({ hm }) => hm);
+}

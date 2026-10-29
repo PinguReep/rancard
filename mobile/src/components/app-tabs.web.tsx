@@ -8,7 +8,7 @@ import { Tabs } from 'expo-router';
 import type { ColorValue } from 'react-native';
 
 import { Icone, type NomIcone } from '@/components/ui/icone';
-import { useDonnees, usePermissions } from '@/state/session';
+import { usePermissions } from '@/state/session';
 import { halo, useTheme } from '@/theme/tokens';
 
 const icone = (nom: NomIcone) =>
@@ -19,7 +19,6 @@ const icone = (nom: NomIcone) =>
 export default function AppTabs() {
   const t = useTheme();
   const p = usePermissions();
-  const receptionniste = useDonnees((s) => s.garage.options.receptionniste);
 
   return (
     <Tabs
@@ -47,7 +46,8 @@ export default function AppTabs() {
       }}>
       <Tabs.Screen name="planning" options={{ title: 'Planning', tabBarIcon: icone('planning') }} />
       <Tabs.Screen name="clients" options={{ title: 'Chercher', tabBarIcon: icone('recherche') }} />
-      <Tabs.Screen name="appels" options={{ title: 'Appels', tabBarIcon: icone('appels'), href: p.appels && receptionniste ? undefined : null }} />
+      {/* Sans le réceptionniste, l’onglet reste visible : il montre la fonction grisée. */}
+      <Tabs.Screen name="appels" options={{ title: 'Appels', tabBarIcon: icone('appels'), href: p.appels ? undefined : null }} />
     </Tabs>
   );
 }

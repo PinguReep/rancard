@@ -88,7 +88,7 @@ export function Bouton({
       ) : (
         <>
           {icone ? <View>{icone}</View> : null}
-          <Text className={`${compact ? 'text-[15px]' : 'text-[17px]'} font-semibold ${texte[variante]}`}>{children}</Text>
+          <Text className={`${compact ? 'text-[15px]' : 'text-[17px]'} text-center font-semibold ${texte[variante]}`}>{children}</Text>
         </>
       )}
     </Pressable>

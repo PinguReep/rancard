@@ -12,13 +12,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BoutonFermer } from '@/components/profil/BoutonFermer';
 import { CarteIdentite } from '@/components/profil/CarteIdentite';
+import { LigneInterrupteur } from '@/components/profil/LigneInterrupteur';
 import { LigneNavigation } from '@/components/profil/LigneNavigation';
 import { LignePush } from '@/components/profil/LignePush';
+import { LigneSonnerie } from '@/components/profil/LigneSonnerie';
 import { useMembreCourant } from '@/components/profil/useMembreCourant';
 import { Ecran, FeuilleConfirmation, Groupe, Legende, impulsion } from '@/components/ui';
 import { Segments } from '@/components/ui/segments';
 import { BACKEND, repo, type Repo } from '@/data';
 import { estGerant } from '@/domain/permissions';
+import { NON_INCLUS } from '@/domain/prestations';
 import { useDonnees, usePermissions, useSession } from '@/state/session';
 import { useApparence, type ChoixApparence } from '@/theme/apparence';
 
@@ -33,6 +36,8 @@ export default function Profil() {
   const choisirApparence = useApparence((s) => s.choisir);
   // Membres actifs, invitations en attente exclues (pas encore de compte).
   const actifs = useDonnees((s) => s.membres.filter((m) => m.actif && !m.invitationEnAttente).length);
+  // Sonnerie dans l'app : avec la permission appels ; grisée sans la prestation réceptionniste.
+  const receptionniste = useDonnees((s) => s.garage.options.receptionniste === true);
   const deconnecter = useSession((s) => s.deconnecter);
   const [feuille, setFeuille] = useState<Feuille>(null);
   const [chargement, setChargement] = useState(false);
@@ -60,7 +65,7 @@ export default function Profil() {
       impulsion('succes');
       // Un compte invité en démonstration disparaît avec la réinitialisation :
       // le store doit suivre le dépôt, sinon l'app continue avec un membre fantôme.
-      if (!(await repo().sessionCourante())) await deconnecter();
+      if ((await repo().sessionCourante())?.type !== 'session') await deconnecter();
     } finally {
       setChargement(false);
       setFeuille(null);
@@ -90,8 +95,28 @@ export default function Profil() {
             <LigneNavigation titre="Équipe" valeur={`${actifs} membre${actifs > 1 ? 's' : ''}`} onPress={() => router.push('/profil/equipe')} />
           ) : null}
           {gerant ? <LigneNavigation titre="Le garage" onPress={() => router.push('/profil/garage')} /> : null}
+          {/* Renvoi d’appel vers l’agent : gérant ou permission appels ; sans la prestation, la ligne
+              reste visible et ouvre l’état « Non inclus » (docs/09 § 1). */}
+          {p.appels ? (
+            <LigneNavigation
+              titre="Réceptionniste"
+              valeur={receptionniste ? 'Renvoi d’appel' : 'Non inclus'}
+              onPress={() => router.push('/profil/receptionniste')}
+              accessibilityLabel={receptionniste ? 'Réceptionniste, renvoi d’appel' : `Réceptionniste. ${NON_INCLUS}`}
+            />
+          ) : null}
           <LignePush membreId={membre.id} derniere />
         </Groupe>
+
+        {p.appels ? (
+          <Groupe titre="Appels">
+            {receptionniste ? (
+              <LigneSonnerie membreId={membre.id} />
+            ) : (
+              <LigneInterrupteur titre="Recevoir les appels" aide={NON_INCLUS} valeur={false} onChange={() => undefined} desactive derniere />
+            )}
+          </Groupe>
+        ) : null}
 
         <Groupe titre="Compte">
           <LigneNavigation titre="Mon compte" onPress={() => router.push('/profil/compte')} />

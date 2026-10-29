@@ -1,0 +1,65 @@
+diff --git a/node_modules/@twilio/voice-react-native-sdk/ios/TwilioVoiceReactNative+CallInvite.m b/node_modules/@twilio/voice-react-native-sdk/ios/TwilioVoiceReactNative+CallInvite.m
+index addde18..e5fbbfb 100644
+--- a/node_modules/@twilio/voice-react-native-sdk/ios/TwilioVoiceReactNative+CallInvite.m
++++ b/node_modules/@twilio/voice-react-native-sdk/ios/TwilioVoiceReactNative+CallInvite.m
+@@ -36,17 +36,24 @@
+             break;
+         }
+     }
+-    NSAssert(uuid, @"No matching call invite");
++    // Rencar (correctif local, issues #722 et #704) : invitation déjà refusée, ou
++    // décrochée sur un autre téléphone (sonnerie à plusieurs). Rien à annuler ;
++    // sans ce garde-fou, la clé nil faisait planter l'app.
++    if (!uuid) {
++        NSLog(@"[TwilioVoiceReactNative] Cancelled call invite without a matching call invite: ignored.");
++        return;
++    }
+     self.cancelledCallInviteMap[uuid] = cancelledCallInvite;
+ 
++    NSString *errorMessage = [error localizedDescription] ?: @"";
+     [self sendEventWithName:kTwilioVoiceReactNativeScopeCallInvite
+                        body:@{
+                          kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallInviteEventTypeValueCancelled,
+-                         kTwilioVoiceReactNativeCallInviteEventKeyCallSid: cancelledCallInvite.callSid,
++                         kTwilioVoiceReactNativeCallInviteEventKeyCallSid: cancelledCallInvite.callSid ?: @"",
+                          kTwilioVoiceReactNativeEventKeyCancelledCallInvite: [self cancelledCallInviteInfo:cancelledCallInvite],
+                          kTwilioVoiceReactNativeVoiceErrorKeyError: @{
+                            kTwilioVoiceReactNativeVoiceErrorKeyCode: @(error.code),
+-                           kTwilioVoiceReactNativeVoiceErrorKeyMessage: [error localizedDescription]}}];
++                           kTwilioVoiceReactNativeVoiceErrorKeyMessage: errorMessage}}];
+     
+     [self.callInviteMap removeObjectForKey:uuid];
+     
+diff --git a/node_modules/@twilio/voice-react-native-sdk/ios/TwilioVoiceReactNative+CallKit.m b/node_modules/@twilio/voice-react-native-sdk/ios/TwilioVoiceReactNative+CallKit.m
+index ad3fd1d..d7c64c0 100644
+--- a/node_modules/@twilio/voice-react-native-sdk/ios/TwilioVoiceReactNative+CallKit.m
++++ b/node_modules/@twilio/voice-react-native-sdk/ios/TwilioVoiceReactNative+CallKit.m
+@@ -287,7 +287,13 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
+ 
+ - (void)performAnswerVoiceCallWithUUID:(NSUUID *)uuid
+                             completion:(void(^)(BOOL success))completionHandler {
+-    NSAssert(self.callInviteMap[uuid.UUIDString], @"No call invite");
++    // Rencar (correctif local, issue #704) : l'invitation a disparu (annulée parce
++    // qu'un collègue a décroché le premier) au moment où l'on touche « Décrocher ».
++    if (!self.callInviteMap[uuid.UUIDString]) {
++        NSLog(@"[TwilioVoiceReactNative] Answer requested for a call invite that no longer exists: ignored.");
++        completionHandler(NO);
++        return;
++    }
+ 
+     NSString *uuidString = uuid.UUIDString;
+     TVOIceOptions *iceOptions = [self buildTVOIceOptionsWithServers:self.iceServersMap[uuidString]
+@@ -392,6 +398,13 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
+ }
+ 
+ - (void)provider:(CXProvider *)provider performAnswerCallAction:(CXAnswerCallAction *)action {
++    // Rencar (correctif local, issue #704) : plus d'invitation à décrocher, CallKit
++    // referme l'écran d'appel au lieu de laisser l'app planter.
++    if (!self.callInviteMap[action.callUUID.UUIDString]) {
++        [action fail];
++        return;
++    }
++
+     [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
+     [TwilioVoiceReactNative twilioAudioDevice].block();
+ 

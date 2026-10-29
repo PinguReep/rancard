@@ -9,6 +9,7 @@
 import { Platform } from 'react-native';
 
 import { numeroLien } from './format';
+import { salutation } from './sms';
 
 export const URL_SUIVI_BASE = (process.env.EXPO_PUBLIC_SUIVI_URL ?? 'https://suivi.rencar.example/suivi').replace(/\/+$/, '');
 
@@ -22,7 +23,15 @@ export function smsHref(tel: string, corps?: string): string {
   return `sms:${numero}${separateur}body=${encodeURIComponent(corps)}`;
 }
 
-/** Texte du SMS qui envoie le lien de suivi au client. */
+/** Texte du SMS qui envoie le lien de suivi au client (prénom facultatif : « Bonjour, »). */
 export function texteSmsSuivi(v: { prenom: string; garage: string; token: string }): string {
-  return `Bonjour ${v.prenom}, suivez l’avancement de votre véhicule ici : ${lienSuivi(v.token)} · ${v.garage}`;
+  return `${salutation(v.prenom)}, suivez l’avancement de votre véhicule ici : ${lienSuivi(v.token)} · ${v.garage}`;
+}
+
+/**
+ * Début du SMS ouvert par la bulle « Écrire un SMS » de la fiche : court,
+ * avec le lien de suivi, la suite s’écrit dans l’app SMS du téléphone.
+ */
+export function texteSmsBulle(v: { prenom: string; token: string }): string {
+  return `${salutation(v.prenom)}, le suivi de votre véhicule : ${lienSuivi(v.token)}`;
 }

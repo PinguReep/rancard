@@ -1,7 +1,9 @@
 /**
- * Connexion. E-mail et mot de passe du garage, ou accès direct au garage
+ * Connexion. E-mail et mot de passe du garage, création d'un compte (le
+ * garage attend ensuite la validation de Rencar), ou accès direct au garage
  * de démonstration, toujours local (sans compte ni serveur, même dans un
- * build supabase). Le lien « mot de passe oublié » ouvre l'écran dédié.
+ * build supabase). Un compte dont l'adresse n'est pas confirmée va à la
+ * saisie du code. Le lien « mot de passe oublié » ouvre l'écran dédié.
  * Si la reprise de session a échoué au démarrage, la raison est affichée.
  */
 
@@ -10,7 +12,8 @@ import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 import { Bouton, Champ, Ecran, Erreur, Legende, Secondaire, Titre } from '@/components/ui';
-import { BACKEND } from '@/data';
+import { AdresseNonConfirmee, BACKEND } from '@/data';
+import { MESSAGE_ACCES_SUSPENDU } from '@/data/repo';
 import { useSession } from '@/state/session';
 
 export default function Connexion() {
@@ -18,6 +21,7 @@ export default function Connexion() {
   const connecter = useSession((s) => s.connecter);
   const connecterDemo = useSession((s) => s.connecterDemo);
   const erreurSession = useSession((s) => s.erreur);
+  const avis = useSession((s) => s.avis);
   const [email, setEmail] = useState('');
   const [mdp, setMdp] = useState('');
   const [erreur, setErreur] = useState<string | null>(null);
@@ -36,7 +40,9 @@ export default function Connexion() {
     try {
       await connecter(email, mdp);
     } catch (e) {
-      setErreur((e as Error).message);
+      // Compte créé dans l’app dont le code n’a pas été saisi : on va le saisir.
+      if (e instanceof AdresseNonConfirmee) router.push({ pathname: '/(auth)/confirmer', params: { email: e.email, depuis: 'connexion' } });
+      else setErreur((e as Error).message);
     } finally {
       setChargement(false);
     }
@@ -59,7 +65,7 @@ export default function Connexion() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-center px-6">
         <View className="mb-10">
           <View className="mb-6 h-14 w-14 items-center justify-center rounded-2xl bg-accent dark:bg-accent-fond">
-            <Text className="text-white text-[26px] font-bold">A</Text>
+            <Text className="text-white text-[26px] font-bold">R</Text>
           </View>
           <Titre>Rencar</Titre>
           <Secondaire className="mt-2">L’atelier dans la poche : planning, clients, appels.</Secondaire>
@@ -101,11 +107,24 @@ export default function Connexion() {
           className="min-h-[44px] justify-center self-center px-3 active:opacity-70">
           <Secondaire ton="accent">J’ai reçu une invitation</Secondaire>
         </Pressable>
-        {erreurSession ? <Erreur className="mt-3 text-center">Impossible de reprendre la session : {erreurSession}</Erreur> : null}
+        {erreurSession ? (
+          // Accès coupé : la phrase se suffit ; une autre erreur dit qu’elle empêche de reprendre la session.
+          <Erreur className="mt-3 text-center">
+            {erreurSession === MESSAGE_ACCES_SUSPENDU ? erreurSession : `Impossible de reprendre la session : ${erreurSession}`}
+          </Erreur>
+        ) : null}
+        {avis && !erreurSession ? (
+          <Legende accessibilityLiveRegion="polite" className="mt-3 text-center">
+            {avis}
+          </Legende>
+        ) : null}
 
         <View className="mt-12 items-center">
           <Legende className="mb-3">Pas encore de compte ?</Legende>
-          <Bouton variante="secondaire" onPress={ouvrirDemo} chargement={chargementDemo}>
+          <Bouton variante="secondaire" onPress={() => router.push('/(auth)/inscription')} className="self-stretch" accessibilityLabel="Créer un compte pour votre garage">
+            Créer un compte
+          </Bouton>
+          <Bouton variante="discret" onPress={ouvrirDemo} chargement={chargementDemo} className="mt-2 self-stretch">
             Essayer avec le garage de démonstration
           </Bouton>
           {erreurDemo ? <Erreur className="mt-3 text-center">{erreurDemo}</Erreur> : null}

@@ -102,7 +102,7 @@ export function FormulaireVehicule({ valeurs, onChange, erreurs, autoFocus, onSu
             erreur={erreurs.marque}
             autoCapitalize="words"
             autoCorrect={false}
-            placeholder="Peugeot"
+            placeholder="Ex. Peugeot"
             returnKeyType="next"
             submitBehavior="submit"
             onSubmitEditing={() => champModele.current?.focus()}
@@ -117,7 +117,7 @@ export function FormulaireVehicule({ valeurs, onChange, erreurs, autoFocus, onSu
             erreur={erreurs.modele}
             autoCapitalize="words"
             autoCorrect={false}
-            placeholder="208"
+            placeholder="Ex. 208"
             returnKeyType="next"
             submitBehavior="submit"
             onSubmitEditing={() => champVersion.current?.focus()}
@@ -129,7 +129,7 @@ export function FormulaireVehicule({ valeurs, onChange, erreurs, autoFocus, onSu
         libelle="Version (facultatif)"
         value={valeurs.version}
         onChangeText={(version) => maj({ version })}
-        placeholder="1.5 BlueHDi"
+        placeholder="Ex. 1.5 BlueHDi"
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="next"
@@ -145,7 +145,7 @@ export function FormulaireVehicule({ valeurs, onChange, erreurs, autoFocus, onSu
             value={valeurs.annee}
             onChangeText={saisirAnnee}
             erreur={erreurs.annee}
-            placeholder="2019"
+            placeholder="Ex. 2019"
             maxLength={4}
             returnKeyType="next"
             submitBehavior="submit"
@@ -160,7 +160,7 @@ export function FormulaireVehicule({ valeurs, onChange, erreurs, autoFocus, onSu
             value={valeurs.km}
             onChangeText={(km) => maj({ km })}
             erreur={erreurs.km}
-            placeholder="87 400"
+            placeholder="Ex. 87 400"
             returnKeyType="done"
             onSubmitEditing={onSubmit}
           />

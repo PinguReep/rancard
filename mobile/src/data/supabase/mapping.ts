@@ -6,26 +6,41 @@
  * normalisées en ISO UTC (« …Z ») comme en mode démo.
  */
 
+import type { PatchIntervention } from '@/data/repo';
+import { ATTENTE_AUDIO_MAX_MIN } from '@/domain/appels';
 import type {
+  Accord,
   Appel,
   Blocage,
+  CanalAccord,
+  CanalPrevenu,
   CleContexte,
   Client,
   Commentaire,
   ContexteAppel,
+  DemandeInscription,
+  DetailBlocage,
+  DetailsEvenement,
+  EcouteAppel,
   EtapeAppel,
+  EtatTransfert,
   Evenement,
   Garage,
   Intervention,
   IssueAppel,
   Membre,
+  MotifAnnulation,
   Notification,
   Origine,
   Permissions,
   Photo,
   Poste,
+  Prevenu,
+  Replique,
   Role,
   Statut,
+  TransfertAppel,
+  TypeEvenement,
   TypeNotification,
   Vehicule,
 } from '@/domain/types';
@@ -39,10 +54,21 @@ export type LigneGarage = {
   telephone: string;
   expediteur_sms: string;
   horaires: Garage['horaires'];
-  options: Garage['options'];
+  /** Prestations (site, sms, receptionniste) et préférence smsAutomatique ; une clé absente vaut false */
+  options: Partial<Garage['options']> | null;
   texte_sms_pret: string;
   cree_le: string;
   maj_le: string;
+};
+
+/** Réponse de la RPC `ma_demande()` (0015) : la demande d’inscription du compte connecté. */
+export type LigneDemande = {
+  email: string;
+  email_confirme: boolean;
+  prenom: string;
+  nom: string;
+  garage: { nom: string; adresse: string; telephone: string } | null;
+  cree_le: string;
 };
 
 export type LigneMembre = {
@@ -120,6 +146,23 @@ export type LigneIntervention = {
   suivi_token: string;
   cree_le: string;
   maj_le: string;
+  // ── v2c (0014_atelier.sql) : facultatives pour lire une base encore à 0013
+  blocage_quoi?: string | null;
+  blocage_pour?: string | null;
+  blocage_annonce?: boolean | null;
+  devis_envoye_le?: string | null;
+  prevenu_canal?: CanalPrevenu | null;
+  prevenu_le?: string | null;
+  prevenu_par?: string | null;
+  accord_de?: string | null;
+  accord_canal?: CanalAccord | null;
+  accord_le?: string | null;
+  accord_par?: string | null;
+  /** Nuls sans voirPrix (`accord_montant_visible` dans la vue) */
+  accord_montant_avant?: number | string | null;
+  accord_montant_apres?: number | string | null;
+  km_depot?: number | null;
+  annulation_motif?: MotifAnnulation | null;
 };
 
 export type LignePhoto = {
@@ -144,6 +187,12 @@ export type LigneCommentaire = {
   cree_le: string;
   /** Jointure PostgREST `photos(*)` */
   photos?: LignePhoto[] | null;
+  /** Note automatique liée à son événement (0014) */
+  evenement_id?: string | null;
+  /** Phrase écrite par le serveur (0014), liée ou non à un événement */
+  automatique?: boolean | null;
+  retiree_le?: string | null;
+  retiree_par?: string | null;
 };
 
 export type LigneEvenement = {
@@ -151,9 +200,14 @@ export type LigneEvenement = {
   garage_id: string;
   intervention_id: string;
   membre_id: string | null;
-  type: Evenement['type'];
+  type: TypeEvenement;
   valeur: string | null;
   cree_le: string;
+  // ── 0014
+  avant?: string | null;
+  visible_client?: boolean | null;
+  /** jsonb, clés en camelCase (DetailsEvenement) */
+  details?: Record<string, unknown> | null;
 };
 
 export type LigneAppel = {
@@ -172,7 +226,30 @@ export type LigneAppel = {
   /** Contexte de l'appel en direct (0012) : forme décrite par versContexte */
   contexte?: unknown;
   contexte_maj_le?: string | null;
+  /** Passage à l'équipe (0016), écrit par les fonctions Edge seulement */
+  transfert_etat?: string | null;
+  transfert_le?: string | null;
+  transfert_fin_le?: string | null;
+  pris_par?: string | null;
+  pris_le?: string | null;
+  duree_equipe_sec?: number | null;
 };
+
+const ETATS_TRANSFERT: readonly EtatTransfert[] = ['sonne', 'en_ligne', 'termine', 'sans_reponse', 'echec'];
+
+/** Colonnes du transfert (0016) → `Appel.transfert` ; absent sans transfert ou pour un état inconnu. */
+export function versTransfert(l: LigneAppel): TransfertAppel | undefined {
+  const etat = ETATS_TRANSFERT.find((e) => e === l.transfert_etat);
+  if (!etat || !l.transfert_le) return undefined;
+  return {
+    etat,
+    le: iso(l.transfert_le),
+    finLe: l.transfert_fin_le ? iso(l.transfert_fin_le) : undefined,
+    prisPar: optionnel(l.pris_par),
+    prisLe: l.pris_le ? iso(l.pris_le) : undefined,
+    dureeSec: typeof l.duree_equipe_sec === 'number' ? l.duree_equipe_sec : undefined,
+  };
+}
 
 /** « Lue » n’est pas sur la ligne : c’est par membre, dans notifications_lues. */
 export type LigneNotification = {
@@ -184,6 +261,8 @@ export type LigneNotification = {
   detail: string;
   cible: Notification['cible'] | null;
   cree_le: string;
+  /** Événement qui l’a produite (0014) : supprimée avec lui */
+  evenement_id?: string | null;
 };
 
 /** Une ligne par (notification, membre) qui l’a ouverte ; la RLS ne montre que les siennes. */
@@ -220,6 +299,81 @@ export function compacter<T extends Record<string, unknown>>(o: T): Partial<T> {
   return r;
 }
 
+/** Date facultative : ISO UTC, ou undefined. */
+const dateOuRien = (v: unknown): string | undefined => (typeof v === 'string' && v ? iso(v) : undefined);
+
+/**
+ * Détail de blocage (colonnes `blocage_*` ou objet jsonb des événements) :
+ * clés absentes plutôt que nulles, « annoncé » seulement avec une date.
+ */
+function versDetailBlocage(quoi: unknown, pour: unknown, annonce: unknown): DetailBlocage | undefined {
+  const d: DetailBlocage = {};
+  if (typeof quoi === 'string' && quoi.trim()) d.quoi = quoi;
+  const date = dateOuRien(pour);
+  if (date) {
+    d.pour = date;
+    if (annonce === true) d.annonce = true;
+  }
+  return Object.keys(d).length ? d : undefined;
+}
+
+const objet = (v: unknown): Record<string, unknown> | undefined =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
+
+const detailJson = (v: unknown): DetailBlocage | undefined => {
+  const o = objet(v);
+  return o ? versDetailBlocage(o.quoi, o.pour, o.annonce) : undefined;
+};
+
+const textes = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+
+const montantJson = (v: unknown): number | null | undefined =>
+  v === null ? null : typeof v === 'number' || typeof v === 'string' ? (nombre(v) ?? null) : undefined;
+
+/**
+ * Détails jsonb d’un événement → DetailsEvenement. Les dates sont remises en
+ * ISO UTC (le serveur les écrit au format timestamptz), les clés nulles sont
+ * retirées, les clés inconnues ignorées.
+ */
+export function versDetailsEvenement(brut: Record<string, unknown> | null | undefined): DetailsEvenement | undefined {
+  const o = objet(brut);
+  if (!o) return undefined;
+  const d: DetailsEvenement = {};
+  const ba = objet(o.blocageAvant);
+  if (ba && typeof ba.blocage === 'string') {
+    d.blocageAvant = { blocage: ba.blocage as Blocage };
+    const detail = detailJson(ba.detail);
+    if (detail) d.blocageAvant.detail = detail;
+    const devis = dateOuRien(ba.devisEnvoyeLe);
+    if (devis) d.blocageAvant.devisEnvoyeLe = devis;
+  }
+  const pa = objet(o.prevenuAvant);
+  const paLe = pa ? dateOuRien(pa.le) : undefined;
+  if (pa && typeof pa.canal === 'string' && paLe) {
+    d.prevenuAvant = { canal: pa.canal as CanalPrevenu, le: paLe, par: typeof pa.par === 'string' ? pa.par : null };
+  }
+  if (o.retour === true) d.retour = true;
+  if (o.livraisonAnnulee === true) d.livraisonAnnulee = true;
+  if (typeof o.motif === 'string') d.motif = o.motif as MotifAnnulation;
+  const masques = objet(o.masques);
+  if (masques) d.masques = { evenements: textes(masques.evenements), commentaires: textes(masques.commentaires) };
+  const detail = detailJson(o.detail);
+  if (detail) d.detail = detail;
+  const detailAvant = detailJson(o.detailAvant);
+  if (detailAvant) d.detailAvant = detailAvant;
+  const pourAvant = dateOuRien(o.pourAvant);
+  if (pourAvant) d.pourAvant = pourAvant;
+  const devis = dateOuRien(o.devisEnvoyeLe);
+  if (devis) d.devisEnvoyeLe = devis;
+  if (typeof o.de === 'string') d.de = o.de;
+  if (typeof o.canal === 'string') d.canal = o.canal as CanalAccord;
+  const montantAvant = montantJson(o.montantAvant);
+  if (montantAvant !== undefined) d.montantAvant = montantAvant;
+  const montantApres = montantJson(o.montantApres);
+  if (montantApres !== undefined) d.montantApres = montantApres;
+  return Object.keys(d).length ? d : undefined;
+}
+
 // ─────────────────────────────────────────────── SQL → types métier
 
 export function versGarage(l: LigneGarage): Garage {
@@ -231,11 +385,23 @@ export function versGarage(l: LigneGarage): Garage {
     expediteurSms: l.expediteur_sms,
     horaires: l.horaires,
     options: {
-      receptionniste: Boolean(l.options?.receptionniste),
-      sms: Boolean(l.options?.sms),
-      smsAutomatique: Boolean(l.options?.smsAutomatique),
+      site: l.options?.site === true,
+      receptionniste: l.options?.receptionniste === true,
+      sms: l.options?.sms === true,
+      smsAutomatique: l.options?.smsAutomatique === true,
     },
     texteSmsPret: l.texte_sms_pret,
+  };
+}
+
+export function versDemande(l: LigneDemande): DemandeInscription {
+  return {
+    email: l.email,
+    emailConfirme: l.email_confirme === true,
+    prenom: l.prenom ?? '',
+    nom: l.nom ?? '',
+    garage: { nom: l.garage?.nom ?? '', adresse: l.garage?.adresse ?? '', telephone: l.garage?.telephone ?? '' },
+    creeLe: iso(l.cree_le),
   };
 }
 
@@ -321,6 +487,31 @@ export function versIntervention(l: LigneIntervention): Intervention {
     suiviToken: l.suivi_token,
     creeLe: iso(l.cree_le),
     majLe: iso(l.maj_le),
+    ...compacter({
+      detailBlocage: l.blocage ? versDetailBlocage(l.blocage_quoi, l.blocage_pour, l.blocage_annonce) : undefined,
+      devisEnvoyeLe: l.blocage === 'attente_accord' ? dateOuRien(l.devis_envoye_le) : undefined,
+      prevenu: versPrevenu(l),
+      dernierAccord: versAccord(l),
+      kmDepot: nombre(l.km_depot),
+      motifAnnulation: l.statut === 'annule' ? optionnel(l.annulation_motif) : undefined,
+    }),
+  };
+}
+
+function versPrevenu(l: LigneIntervention): Prevenu | undefined {
+  if (!l.prevenu_canal || !l.prevenu_le) return undefined;
+  return { canal: l.prevenu_canal, le: iso(l.prevenu_le), par: l.prevenu_par ?? null };
+}
+
+/** Dernier accord ; montants présents seulement si la vue les rend (voirPrix). */
+function versAccord(l: LigneIntervention): Accord | undefined {
+  if (!l.accord_de || !l.accord_canal || !l.accord_le) return undefined;
+  return {
+    de: l.accord_de,
+    canal: l.accord_canal,
+    le: iso(l.accord_le),
+    par: l.accord_par ?? null,
+    ...compacter({ montantAvant: nombre(l.accord_montant_avant), montantApres: nombre(l.accord_montant_apres) }),
   };
 }
 
@@ -345,6 +536,9 @@ export function versCommentaire(l: LigneCommentaire, urls: ReadonlyMap<string, s
     visibleClient: l.visible_client,
     photos: photos.map((p) => versPhoto(p, urls)),
     creeLe: iso(l.cree_le),
+    ...(l.evenement_id ? { evenementId: l.evenement_id } : {}),
+    ...(l.automatique ? { automatique: true } : {}),
+    ...(l.retiree_le ? { retireeLe: iso(l.retiree_le), retireePar: l.retiree_par ?? null } : {}),
   };
 }
 
@@ -356,6 +550,10 @@ export function versEvenement(l: LigneEvenement): Evenement {
     type: l.type,
     valeur: l.valeur,
     creeLe: iso(l.cree_le),
+    ...(l.avant !== undefined ? { avant: l.avant } : {}),
+    // Colonne absente (base encore à 0013) : l’étape compte pour la page, comme avant.
+    visibleClient: l.visible_client !== false,
+    ...compacter({ details: versDetailsEvenement(l.details) }),
   };
 }
 
@@ -374,6 +572,7 @@ export function versAppel(l: LigneAppel): Appel {
     enregistrementUrl: optionnel(l.enregistrement_url),
     interventionId: optionnel(l.intervention_id),
     contexte: versContexte(l.contexte, l.contexte_maj_le),
+    transfert: versTransfert(l),
   };
 }
 
@@ -417,6 +616,50 @@ export function versContexte(brut: unknown, majLe?: string | null): ContexteAppe
   return { etape, champs, majLe: majLe ? iso(majLe) : undefined };
 }
 
+/** Ligne de `appels_ecoutes` (0018), colonnes lues par l'app. */
+export type LigneEcoute = {
+  repliques: unknown;
+  audio_etat: 'a_recuperer' | 'pret' | 'absent' | 'echec';
+  audio_chemin: string | null;
+  expire_le: string;
+  cree_le: string;
+};
+
+/**
+ * Répliques de `appels_ecoutes.repliques` → fil de l'app. Lecture
+ * défensive (texte dicté par l'appelant, transcrit par ElevenLabs) : rôle
+ * connu, texte non vide et borné, instant positif ; triées par instant.
+ */
+export function versRepliques(brut: unknown): Replique[] {
+  if (!Array.isArray(brut)) return [];
+  const repliques: Replique[] = [];
+  for (const r of brut) {
+    if (!estObjet(r)) continue;
+    const role = r.role === 'agent' || r.role === 'appelant' ? r.role : null;
+    const texte = typeof r.texte === 'string' ? r.texte.trim().slice(0, 4000) : '';
+    const t = typeof r.t === 'number' && Number.isFinite(r.t) && r.t >= 0 ? r.t : null;
+    if (role && texte && t !== null) repliques.push({ role, texte, t });
+  }
+  return repliques.sort((a, b) => a.t - b.t);
+}
+
+/**
+ * Ligne d'écoute → conversation de l'app. `uri` : URL signée de l'audio
+ * (null si l'audio n'est pas prêt ou n'a pas pu être signé). Une
+ * récupération qui dure plus de ATTENTE_AUDIO_MAX_MIN n'aboutira plus :
+ * l'enregistrement est alors indisponible.
+ */
+export function versEcoute(l: LigneEcoute, uri: string | null, maintenant = Date.now()): EcouteAppel {
+  const recente = maintenant - new Date(l.cree_le).getTime() < ATTENTE_AUDIO_MAX_MIN * 60_000;
+  const audio: EcouteAppel['audio'] =
+    l.audio_etat === 'pret' && uri
+      ? { etat: 'pret', source: { uri } }
+      : l.audio_etat === 'a_recuperer' && recente
+        ? { etat: 'attente' }
+        : { etat: 'indisponible' };
+  return { repliques: versRepliques(l.repliques), audio, conserveJusquAu: iso(l.expire_le) };
+}
+
 /** `lues` : identifiants des notifications que le membre connecté a ouvertes. */
 export function versNotification(l: LigneNotification, lues: ReadonlySet<string>): Notification {
   return {
@@ -429,14 +672,27 @@ export function versNotification(l: LigneNotification, lues: ReadonlySet<string>
     cible: optionnel(l.cible),
     lue: lues.has(l.id),
     creeLe: iso(l.cree_le),
+    ...(l.evenement_id ? { evenementId: l.evenement_id } : {}),
   };
 }
 
 // ─────────────────────────────────────────────── types métier → SQL
 
-export function patchInterventionVersLigne(
-  p: Partial<Pick<Intervention, 'prestation' | 'demande' | 'debut' | 'dureeMin' | 'restitutionPrevue' | 'memo' | 'prioritaire' | 'montantEstime'>>,
-): Partial<LigneIntervention> {
+/**
+ * Détail de blocage → colonnes `blocage_*` ; null retire tout. Le trigger
+ * « avant » de 0014 normalise de son côté : on envoie déjà des valeurs
+ * conformes aux contraintes (annonce seulement avec une date).
+ */
+export function detailBlocageVersLigne(
+  d: DetailBlocage | null,
+): Required<Pick<LigneIntervention, 'blocage_quoi' | 'blocage_pour' | 'blocage_annonce'>> {
+  const quoi = d?.quoi?.trim();
+  const pour = d?.pour || null;
+  return { blocage_quoi: quoi || null, blocage_pour: pour, blocage_annonce: Boolean(pour && d?.annonce) };
+}
+
+/** `null` retire la valeur (retour prévu, détail du blocage, kilométrage au dépôt) ; `undefined` n’y touche pas. */
+export function patchInterventionVersLigne(p: PatchIntervention): Partial<LigneIntervention> {
   return compacter({
     prestation: p.prestation,
     demande: p.demande,
@@ -446,6 +702,8 @@ export function patchInterventionVersLigne(
     memo: p.memo,
     prioritaire: p.prioritaire,
     montant_estime: p.montantEstime,
+    km_depot: p.kmDepot,
+    ...(p.detailBlocage !== undefined ? detailBlocageVersLigne(p.detailBlocage) : {}),
   });
 }
 

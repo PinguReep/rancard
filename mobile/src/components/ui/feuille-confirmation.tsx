@@ -19,13 +19,32 @@ type Props = {
   texte?: string;
   /** Libellé du bouton de confirmation */
   libelle: string;
+  /** Libellé du bouton qui renonce (« Annuler » par défaut) */
+  libelleRetour?: string;
   variante?: 'principal' | 'danger';
   onConfirmer: () => void | Promise<void>;
   chargement?: boolean;
+  /** Inertie à l’ouverture (v2c) : `GARDE_MS` pour une confirmation ouverte par un geste */
+  inerteMs?: number;
+  /** Sous-titre (voiture, client) */
+  legende?: string;
   children?: ReactNode;
 };
 
-export function FeuilleConfirmation({ ouverte, onFermer, titre, texte, libelle, variante = 'danger', onConfirmer, chargement, children }: Props) {
+export function FeuilleConfirmation({
+  ouverte,
+  onFermer,
+  titre,
+  texte,
+  libelle,
+  libelleRetour = 'Annuler',
+  variante = 'danger',
+  onConfirmer,
+  chargement,
+  inerteMs,
+  legende,
+  children,
+}: Props) {
   const [enCours, setEnCours] = useState(false);
   const occupe = Boolean(chargement) || enCours;
 
@@ -39,7 +58,7 @@ export function FeuilleConfirmation({ ouverte, onFermer, titre, texte, libelle, 
   }
 
   return (
-    <Feuille ouverte={ouverte} onFermer={onFermer} titre={titre}>
+    <Feuille ouverte={ouverte} onFermer={onFermer} titre={titre} legende={legende} inerteMs={inerteMs}>
       {texte ? <Secondaire className="mb-5">{texte}</Secondaire> : null}
       {children}
       <View className="gap-2">
@@ -47,7 +66,7 @@ export function FeuilleConfirmation({ ouverte, onFermer, titre, texte, libelle, 
           {libelle}
         </Bouton>
         <Bouton variante="secondaire" onPress={onFermer} desactive={occupe}>
-          Annuler
+          {libelleRetour}
         </Bouton>
       </View>
     </Feuille>
