@@ -99,8 +99,8 @@ export default function Notifications() {
           titre="Rien de nouveau"
           texte={
             p.voirTout
-              ? 'Les rendez-vous du site, les fiches du réceptionniste et les relais de l’équipe (pièces, accords, voitures confiées) arrivent ici.'
-              : 'Les voitures qui vous sont confiées, les pièces reçues et les accords des clients arrivent ici.'
+              ? 'Les rendez-vous du site, les fiches du réceptionniste, les messages des clients et les relais de l’équipe (pièces, accords, voitures confiées) arrivent ici.'
+              : 'Les voitures qui vous sont confiées, les pièces reçues, les accords et les messages des clients arrivent ici.'
           }
         />
       ) : (

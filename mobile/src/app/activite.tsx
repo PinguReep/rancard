@@ -2,16 +2,21 @@
  * Activité du garage (depuis le profil, avec la permission « Voir
  * l’activité ») : trois chiffres sur la période, rien de plus. Rendez-vous
  * créés, véhicules livrés, et le montant livré (ou, sans accès aux prix,
- * les interventions bloquées en ce moment).
+ * les interventions bloquées en ce moment). Dessous, seulement si un client
+ * a écrit depuis sa page de suivi (0020) : les messages reçus sur la
+ * période et ceux qui attendent une réponse, un appui ouvre l’intervention.
  */
 
+import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
+import { MessagesClients } from '@/components/activite/MessagesClients';
 import { bornes, calculerStats, libellePeriode, PERIODES, type Periode } from '@/components/activite/stats';
 import { Carte, Chiffre, Ecran, Legende, Titre, Vide } from '@/components/ui';
 import { Segments } from '@/components/ui/segments';
+import { messagesARepondre } from '@/domain/messages-clients';
 import { euros } from '@/lib/format';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
 
@@ -27,6 +32,7 @@ function Grand({ libelle, valeur, ton }: { libelle: string; valeur: string; ton?
 }
 
 export default function Activite() {
+  const router = useRouter();
   const membre = useMembre();
   const p = usePermissions();
   const garage = useDonnees((s) => s.garage);
@@ -34,6 +40,10 @@ export default function Activite() {
   const evenements = useDonnees((s) => s.evenements);
   const appels = useDonnees((s) => s.appels);
   const membres = useDonnees((s) => s.membres);
+  const clients = useDonnees((s) => s.clients);
+  const vehicules = useDonnees((s) => s.vehicules);
+  const commentaires = useDonnees((s) => s.commentaires);
+  const messagesClients = useDonnees((s) => s.messagesClients);
   const [periode, setPeriode] = useState<Periode>('semaine');
 
   const stats = useMemo(() => {
@@ -48,6 +58,18 @@ export default function Activite() {
       periode,
     });
   }, [interventions, evenements, appels, membres, membre.id, p.voirTout, garage.options.receptionniste, periode]);
+
+  // Messages des clients sur les fiches que le membre voit (un employé sans « voir tout » : les siennes).
+  const messages = useMemo(() => {
+    const visibles = new Set((p.voirTout ? interventions : interventions.filter((i) => i.membreId === membre.id)).map((i) => i.id));
+    const siens = messagesClients.filter((m) => visibles.has(m.interventionId));
+    const b = bornes(periode);
+    const recus = siens.filter((m) => {
+      const t = new Date(m.creeLe).getTime();
+      return t >= b.de.getTime() && t <= b.a.getTime();
+    }).length;
+    return { recus, aRepondre: messagesARepondre(siens, commentaires, visibles) };
+  }, [interventions, messagesClients, commentaires, membre.id, p.voirTout, periode]);
 
   if (!p.activite) {
     return (
@@ -72,6 +94,14 @@ export default function Activite() {
         ) : (
           <Grand libelle="Bloquées en ce moment" valeur={String(stats.bloquees)} ton={stats.bloquees ? 'warn' : undefined} />
         )}
+        <MessagesClients
+          recus={messages.recus}
+          aRepondre={messages.aRepondre}
+          interventions={interventions}
+          clients={clients}
+          vehicules={vehicules}
+          onOuvrir={(id) => router.push(`/intervention/${id}`)}
+        />
       </Animated.View>
     </Ecran>
   );

@@ -16,6 +16,7 @@ import { LigneInterrupteur } from '@/components/profil/LigneInterrupteur';
 import { LigneNavigation } from '@/components/profil/LigneNavigation';
 import { LignePush } from '@/components/profil/LignePush';
 import { LigneSonnerie } from '@/components/profil/LigneSonnerie';
+import { LigneTransfertPortable } from '@/components/profil/LigneTransfertPortable';
 import { useMembreCourant } from '@/components/profil/useMembreCourant';
 import { Ecran, FeuilleConfirmation, Groupe, Legende, impulsion } from '@/components/ui';
 import { Segments } from '@/components/ui/segments';
@@ -37,7 +38,7 @@ export default function Profil() {
   const choisirApparence = useApparence((s) => s.choisir);
   // Membres actifs, invitations en attente exclues (pas encore de compte).
   const actifs = useDonnees((s) => s.membres.filter((m) => m.actif && !m.invitationEnAttente).length);
-  // Sonnerie dans l'app : avec la permission appels ; grisée sans la prestation réceptionniste.
+  // Appels transférés (portable, sonnerie) : avec la permission appels ; grisés sans la prestation réceptionniste.
   const receptionniste = useDonnees((s) => s.garage.options.receptionniste === true);
   const deconnecter = useSession((s) => s.deconnecter);
   const [feuille, setFeuille] = useState<Feuille>(null);
@@ -109,15 +110,21 @@ export default function Profil() {
           <LignePush membreId={membre.id} derniere />
         </Groupe>
 
-        {/* Sonnerie dans l’app : « Rencar Test » seulement ; dans l’app de l’App Store (version 1),
-            le groupe disparaît, sans mention d’une fonction à venir (règle 2.1). */}
-        {p.appels && SONNERIE_INCLUSE ? (
+        {/* Appels passés à l’équipe par le réceptionniste : gérant ou permission appels.
+            · Sur le portable (0019), dans Rencar et Rencar Test : réseau téléphonique classique.
+            · Dans l’app (sonnerie VoIP, 0016) : « Rencar Test » seulement ; dans l’app de l’App
+              Store (version 1), la ligne n’existe pas, sans mention d’une fonction à venir (règle 2.1).
+            Sans la prestation réceptionniste, les lignes restent visibles, grisées (docs/09 § 1). */}
+        {p.appels ? (
           <Groupe titre="Appels">
-            {receptionniste ? (
-              <LigneSonnerie membreId={membre.id} />
-            ) : (
-              <LigneInterrupteur titre="Recevoir les appels" aide={NON_INCLUS} valeur={false} onChange={() => undefined} desactive derniere />
-            )}
+            <LigneTransfertPortable inclus={receptionniste} derniere={!SONNERIE_INCLUSE} />
+            {SONNERIE_INCLUSE ? (
+              receptionniste ? (
+                <LigneSonnerie membreId={membre.id} />
+              ) : (
+                <LigneInterrupteur titre="Recevoir les appels dans l’app" aide={NON_INCLUS} valeur={false} onChange={() => undefined} desactive derniere />
+              )
+            ) : null}
           </Groupe>
         ) : null}
 

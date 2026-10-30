@@ -38,6 +38,7 @@ import {
   RotateCw,
   Search,
   Settings,
+  Sparkles,
   TriangleAlert,
   Undo2,
   Users,
@@ -90,7 +91,8 @@ export type NomIcone =
   | 'annuler'
   | 'colis'
   | 'euro'
-  | 'calendrier';
+  | 'calendrier'
+  | 'redaction';
 
 const SF: Record<NomIcone, string> = {
   planning: 'calendar',
@@ -133,6 +135,7 @@ const SF: Record<NomIcone, string> = {
   colis: 'shippingbox',
   euro: 'eurosign',
   calendrier: 'calendar.badge.plus',
+  redaction: 'sparkles',
 };
 
 const LUCIDE: Record<NomIcone, LucideIcon> = {
@@ -176,6 +179,7 @@ const LUCIDE: Record<NomIcone, LucideIcon> = {
   colis: Package,
   euro: Euro,
   calendrier: CalendarPlus,
+  redaction: Sparkles,
 };
 
 /** Nom SF Symbol pour les onglets natifs. */

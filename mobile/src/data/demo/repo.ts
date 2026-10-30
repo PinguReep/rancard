@@ -22,6 +22,7 @@ import { isSameDay } from 'date-fns';
 import { erreurInscription } from '@/components/auth/saisie';
 import { AccesRefuse, ReceptionEchouee } from '@/data/erreurs';
 import {
+  type AccordRedactionIa,
   AdresseNonConfirmee,
   type Consultations,
   type Identifiants,
@@ -29,11 +30,15 @@ import {
   type NouvelleInscription,
   type NouvelleIntervention,
   type PatchIntervention,
+  type RedactionSms,
   type RenvoiReceptionniste,
   type Repo,
   type ResultatAnnulation,
   type Snapshot,
+  type TransfertPortable,
 } from '@/data/repo';
+import { MESSAGE_PORTABLE_ABSENT, MESSAGE_PORTABLE_INVALIDE, portableFrancais } from '@/domain/portable';
+import { NON_INCLUS } from '@/domain/prestations';
 import { appelEnDirect } from '@/domain/appels';
 import {
   aRetirer,
@@ -65,14 +70,17 @@ import type {
   Statut,
   Vehicule,
 } from '@/domain/types';
+import { type IntentionSms, VERSION_ACCORD_IA } from '@/lib/redaction';
 import { normaliserSms } from '@/lib/sms';
 
 import { ecouteDemo } from './ecoutes';
+import { redactionDemo } from './redaction';
 import { DEMO_MEMBRE_ID, snapshotDemo } from './seed';
 
-// v3 : instantané v2c (kilométrage au dépôt, détail des blocages, événements
-// et notes liés). Un instantané plus ancien est remplacé par le seed.
-const CLE = 'atelier.demo.v3';
+// v4 : messages des clients écrits sur leur page de suivi (0020) ; v3 :
+// instantané v2c (kilométrage au dépôt, détail des blocages, événements et
+// notes liés). Un instantané plus ancien est remplacé par le seed.
+const CLE = 'atelier.demo.v4';
 const CLE_SESSION = 'atelier.demo.session.v1';
 /** Demande d'inscription de démonstration (« Créer un compte ») : une seule, sur ce téléphone. */
 const CLE_DEMANDE = 'atelier.demo.demande.v1';
@@ -80,6 +88,19 @@ const CLE_DEMANDE = 'atelier.demo.demande.v1';
 const SESSION_DEMANDE = 'demande';
 /** Appareils qui « sonnent » en démonstration (« membre:appareil »). */
 const CLE_SONNERIE = 'atelier.demo.sonnerie.v1';
+/** Portables de transfert de la démonstration (membre → réglage), effacés par « Réinitialiser ». */
+const CLE_PORTABLES = 'atelier.demo.portables.v1';
+/**
+ * Réglage de départ : Adrien, l’autre gérant, reçoit les appels transférés
+ * (numéro fictif, tranche 06 39 98 réservée à la fiction par l’Arcep).
+ */
+const PORTABLES_DEMO: Record<string, TransfertPortable> = {
+  'm-adrien': { numero: '+33639980001', accepte: true },
+};
+/** Dernier accord ou retrait de la rédaction par l’IA en démonstration (redaction_ia_accords sur Supabase). */
+const CLE_ACCORD_IA = 'atelier.demo.accord-ia.v1';
+/** Attente simulée d’une rédaction, pour voir l’état de chargement. */
+const DELAI_REDACTION_MS = 900;
 
 type Stockage = { genereLe: string; modifie: boolean; snapshot: Snapshot };
 
@@ -126,6 +147,10 @@ export class DemoRepo implements Repo {
             this.snap = st.snapshot;
             // Stockage d'avant les prestations à la carte : la démonstration a les trois.
             if (typeof this.snap.garage.options.site !== 'boolean') this.snap.garage.options.site = true;
+            // Garde : un instantané sans messages des clients (0020) en a une liste vide.
+            if (!Array.isArray(this.snap.messagesClients)) this.snap.messagesClients = [];
+            // Stockage d’avant la rédaction par l’IA (0021) : désactivée, comme sur un vrai garage.
+            if (typeof this.snap.garage.options.redactionIa !== 'boolean') this.snap.garage.options.redactionIa = false;
             this.genereLe = st.genereLe;
             this.modifie = Boolean(st.modifie);
             if (!memeJour) cloreAppelsAnciens(this.snap);
@@ -174,7 +199,18 @@ export class DemoRepo implements Repo {
     this.snap = snapshotDemo();
     this.genereLe = maintenant();
     this.modifie = false;
+    // L’option repart désactivée : sa trace d’accord part avec elle.
+    try {
+      await AsyncStorage.removeItem(CLE_ACCORD_IA);
+    } catch {
+      // sans effet en démonstration
+    }
     await this.ecrire();
+    try {
+      await AsyncStorage.removeItem(CLE_PORTABLES);
+    } catch {
+      // réglage de départ au prochain accès
+    }
     if (this.membreId && !this.snap.membres.some((m) => m.id === this.membreId)) await this.deconnecter();
   }
 
@@ -723,6 +759,34 @@ export class DemoRepo implements Repo {
     });
   }
 
+  /** Propositions déjà faites par intervention et intention : la suivante change de tournure. */
+  private tirages = new Map<string, number>();
+
+  async redigerSms(interventionId: string, intention: IntentionSms, note?: string): Promise<RedactionSms> {
+    const s = await this.lire();
+    // Mêmes refus que la fonction Edge `redaction` : option du garage, intervention visible du membre.
+    if (s.garage.options.redactionIa !== true) throw new Error('La rédaction des SMS par l’IA n’est pas activée pour ce garage.');
+    const membre = this.membre(s, this.membreId);
+    const i = s.interventions.find((x) => x.id === interventionId);
+    if (!membre || !i || !(peut(membre, 'voirTout') || i.membreId === membre.id)) throw new Error('Intervention introuvable.');
+    if (intention === 'libre' && !note?.trim()) throw new Error('Écrivez en quelques mots ce que vous voulez dire au client.');
+    await new Promise<void>((fin) => setTimeout(fin, DELAI_REDACTION_MS));
+    const cle = `${interventionId}:${intention}`;
+    const tirage = this.tirages.get(cle) ?? 0;
+    this.tirages.set(cle, tirage + 1);
+    const r = redactionDemo({
+      intention,
+      note,
+      garage: s.garage,
+      intervention: i,
+      client: s.clients.find((c) => c.id === i.clientId),
+      vehicule: s.vehicules.find((v) => v.id === i.vehiculeId),
+      voirPrix: peut(membre, 'voirPrix'),
+      tirage,
+    });
+    return r.ia ? { texte: r.texte, ia: true } : { texte: r.texte, ia: false, raison: 'indisponible' };
+  }
+
   // ── Clients et véhicules
 
   async creerClient(c: Parameters<Repo['creerClient']>[0]) {
@@ -866,6 +930,70 @@ export class DemoRepo implements Repo {
     // Démo : l'essai est simulé sur le téléphone.
   }
 
+  // ── Transfert vers les portables (démonstration : réglage gardé sur le téléphone, mêmes règles que 0019)
+
+  private async portables(): Promise<Record<string, TransfertPortable>> {
+    try {
+      const brut = await AsyncStorage.getItem(CLE_PORTABLES);
+      if (!brut) return { ...PORTABLES_DEMO };
+      const v: unknown = JSON.parse(brut);
+      const sortie: Record<string, TransfertPortable> = {};
+      if (v && typeof v === 'object') {
+        for (const [id, r] of Object.entries(v as Record<string, Partial<TransfertPortable>>)) {
+          const numero = portableFrancais(r?.numero ?? null);
+          if (numero) sortie[id] = { numero, accepte: r?.accepte === true };
+        }
+      }
+      return sortie;
+    } catch {
+      return { ...PORTABLES_DEMO };
+    }
+  }
+
+  async transfertPortable(): Promise<TransfertPortable> {
+    if (!this.membreId) return { numero: null, accepte: false };
+    return (await this.portables())[this.membreId] ?? { numero: null, accepte: false };
+  }
+
+  /** Mêmes règles et mêmes messages que regler_transfert_portable() (0019). */
+  async reglerTransfertPortable(r: { numero: string | null; accepte: boolean }): Promise<TransfertPortable> {
+    const s = await this.lire();
+    const moi = s.membres.find((m) => m.id === this.membreId && m.actif && !m.invitationEnAttente);
+    if (!moi) throw new Error('Accès refusé.');
+    const tous = await this.portables();
+    const saisie = (r.numero ?? '').trim();
+    let resultat: TransfertPortable;
+    if (!saisie) {
+      if (r.accepte) throw new Error(MESSAGE_PORTABLE_ABSENT);
+      delete tous[moi.id];
+      resultat = { numero: null, accepte: false };
+    } else {
+      if (!peut(moi, 'appels')) throw new Error('Les appels transférés sont réservés au gérant et aux membres qui traitent les appels.');
+      const numero = portableFrancais(saisie);
+      if (!numero) throw new Error(MESSAGE_PORTABLE_INVALIDE);
+      if (r.accepte && !aPrestation(s.garage, 'receptionniste')) throw new Error(NON_INCLUS);
+      resultat = { numero, accepte: r.accepte };
+      tous[moi.id] = resultat;
+    }
+    try {
+      await AsyncStorage.setItem(CLE_PORTABLES, JSON.stringify(tous));
+    } catch {
+      // en démo, une écriture ratée n'est pas bloquante
+    }
+    return resultat;
+  }
+
+  /** Mêmes règles que transferts_equipe() (0019) : gérant seulement, membres actifs avec la permission appels. */
+  async transfertsEquipe(): Promise<string[]> {
+    const s = await this.lire();
+    const moi = s.membres.find((m) => m.id === this.membreId && m.actif);
+    if (!moi || moi.role !== 'gerant') return [];
+    const tous = await this.portables();
+    return s.membres
+      .filter((m) => m.actif && !m.invitationEnAttente && peut(m, 'appels') && tous[m.id]?.accepte)
+      .map((m) => m.id);
+  }
+
   /**
    * Démonstration seulement (hors contrat Repo) : fait avancer le passage d'un
    * appel à l'équipe comme le feraient les rappels de Twilio, pour montrer la
@@ -937,6 +1065,18 @@ export class DemoRepo implements Repo {
       const m = s.membres.find((x) => x.id === id);
       if (m) Object.assign(m, patch);
     });
+    // Comme le déclencheur de 0019 : un membre désactivé perd son portable de transfert.
+    if (patch.actif === false) {
+      const tous = await this.portables();
+      if (tous[id]) {
+        delete tous[id];
+        try {
+          await AsyncStorage.setItem(CLE_PORTABLES, JSON.stringify(tous));
+        } catch {
+          // non bloquant en démonstration
+        }
+      }
+    }
   }
 
   async modifierGarage(patch: Parameters<Repo['modifierGarage']>[0]) {
@@ -949,5 +1089,35 @@ export class DemoRepo implements Repo {
         s.garage.options = { ...s.garage.options, smsAutomatique: options.smsAutomatique ?? s.garage.options.smsAutomatique };
       }
     });
+  }
+
+  async reglerRedactionIa(actif: boolean) {
+    const s = await this.lire();
+    // Comme regler_redaction_ia (0021) : un gérant actif, une trace par changement.
+    const membre = this.membre(s, this.membreId);
+    if (!membre || !membre.actif || membre.role !== 'gerant') throw new Error('Seul un gérant peut régler la rédaction des SMS par l’IA.');
+    if (s.garage.options.redactionIa === actif) return;
+    // La trace d’abord : l’écran la relit dès que l’option change.
+    const accord: AccordRedactionIa = { actif, membreId: membre.id, le: maintenant(), version: actif ? VERSION_ACCORD_IA : null };
+    try {
+      await AsyncStorage.setItem(CLE_ACCORD_IA, JSON.stringify(accord));
+    } catch {
+      // en démo, une trace perdue n'est pas bloquante
+    }
+    await this.muter((x) => {
+      x.garage.options = { ...x.garage.options, redactionIa: actif };
+    });
+  }
+
+  async accordRedactionIa(): Promise<AccordRedactionIa | null> {
+    try {
+      const brut = await AsyncStorage.getItem(CLE_ACCORD_IA);
+      const a = brut ? (JSON.parse(brut) as Partial<AccordRedactionIa>) : null;
+      return a && typeof a.actif === 'boolean' && typeof a.le === 'string'
+        ? { actif: a.actif, membreId: a.membreId ?? null, le: a.le, version: a.version ?? null }
+        : null;
+    } catch {
+      return null;
+    }
   }
 }

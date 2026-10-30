@@ -37,6 +37,11 @@ type Props = {
    * envoyés par Rencar.
    */
   sms: boolean;
+  /**
+   * Rédaction des SMS par l’IA active : la bulle ouvre la feuille « Écrire
+   * à … » (objet, texte à relire, « Rédiger avec l’IA ») au lieu de l’app SMS.
+   */
+  onEcrire?: () => void;
   /** Toucher la case « Mécanicien » pour réattribuer */
   onAttribuer?: () => void;
   /** Toucher la case « Horaire » d’une fiche à valider ou confirmée : déplacer le rendez-vous */
@@ -103,7 +108,7 @@ function Repere({
   );
 }
 
-export function EnTeteFiche({ intervention: i, client, vehicule, mecanicien, sms, onAttribuer, onDeplacer, onRetourPrevu, onKilometrage }: Props) {
+export function EnTeteFiche({ intervention: i, client, vehicule, mecanicien, sms, onEcrire, onAttribuer, onDeplacer, onRetourPrevu, onKilometrage }: Props) {
   const router = useRouter();
   const t = useTheme();
   const nom = nomClient(client);
@@ -241,6 +246,10 @@ export function EnTeteFiche({ intervention: i, client, vehicule, mecanicien, sms
               accessibilityLabel={`Écrire un SMS à ${nom}`}
               onPress={() => {
                 impulsion('leger');
+                if (onEcrire) {
+                  onEcrire();
+                  return;
+                }
                 // Un texte court avec le lien de suivi : le client peut suivre sa voiture dès ce premier message.
                 void Linking.openURL(smsHref(telephone, texteSmsBulle({ prenom: client.prenom, token: i.suiviToken })));
               }}

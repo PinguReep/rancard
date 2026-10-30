@@ -33,6 +33,12 @@ export type Garage = {
     sms: boolean;
     /** Préférence du gérant : le SMS « véhicule prêt » part sans confirmation (avec la prestation SMS) */
     smsAutomatique: boolean;
+    /**
+     * Rédaction des SMS par l’IA (Mistral AI, 0021) : accordée par un gérant
+     * après l’écran d’accord, retirée à tout moment (`reglerRedactionIa`),
+     * jamais par `modifierGarage`. Désactivée par défaut.
+     */
+    redactionIa: boolean;
   };
   /** Texte du SMS « véhicule prêt », avec {prenom} et {garage} */
   texteSmsPret: string;
@@ -230,6 +236,19 @@ export type Commentaire = {
   retireePar?: string | null;
 };
 
+/**
+ * Message écrit par le client sur sa page de suivi (« Répondre au garage »,
+ * 0020). Lu par l’équipe qui voit la fiche, jamais modifié ni supprimé :
+ * on lui répond par une note visible client.
+ */
+export type MessageClient = {
+  id: string;
+  garageId: string;
+  interventionId: string;
+  texte: string;
+  creeLe: string;
+};
+
 export type Photo = {
   id: string;
   /** URI locale (démo) ou URL signée (Supabase Storage) */
@@ -389,7 +408,8 @@ export type ContexteAppel = {
 
 // ───────────────────────────────────────────────────────────── Notifications
 
-export type TypeNotification = 'rdv_site' | 'ia' | 'accord' | 'piece' | 'equipe';
+/** `message_client` : le client a écrit depuis sa page de suivi (0020). */
+export type TypeNotification = 'rdv_site' | 'ia' | 'accord' | 'piece' | 'equipe' | 'message_client';
 
 export type Notification = {
   id: string;

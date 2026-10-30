@@ -48,7 +48,7 @@ export function BlocTransfert({ appel }: { appel: Appel }) {
         <Legende className="mt-1.5">
           {recoit
             ? 'Démonstration : le réceptionniste passe cet appel à l’équipe et ce téléphone sonne.'
-            : 'Démonstration : activez « Recevoir les appels » dans le profil pour que ce téléphone sonne.'}
+            : 'Démonstration : activez « Recevoir les appels dans l’app » dans le profil pour que ce téléphone sonne.'}
         </Legende>
       </View>
     );

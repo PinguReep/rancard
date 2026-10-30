@@ -24,6 +24,7 @@ export const ICONE_PAR_TYPE: Record<TypeNotification, NomIcone> = {
   accord: 'valider',
   piece: 'colis',
   equipe: 'clients',
+  message_client: 'message',
 };
 
 /** Détail affiché : tel quel s’il vient d’un événement (dates absolues), relu sinon. */
@@ -49,7 +50,8 @@ export function LigneNotification({ notification: n, onPress, derniere }: Props)
         className={`h-10 w-10 items-center justify-center rounded-xl ${
           n.lue ? 'bg-surface2 dark:bg-surface2-dark' : 'bg-accent-soft dark:bg-accent-softdark'
         }`}>
-        <Icone nom={ICONE_PAR_TYPE[n.type]} taille={18} couleur={n.lue ? t.muted : t.accent} />
+        {/* Type ajouté côté serveur après ce build : la cloche plutôt qu’une icône absente. */}
+        <Icone nom={ICONE_PAR_TYPE[n.type] ?? 'cloche'} taille={18} couleur={n.lue ? t.muted : t.accent} />
       </View>
       <View className="flex-1">
         <View className="flex-row items-baseline gap-2">

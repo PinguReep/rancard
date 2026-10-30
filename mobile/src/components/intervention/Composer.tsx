@@ -7,7 +7,9 @@
  * publication, on revient à « Équipe ».
  *
  * La fiche appelle `photographier()` depuis sa barre d'action (bouton
- * Photo) : la photo arrive ici, prête à être publiée.
+ * Photo) : la photo arrive ici, prête à être publiée. Elle appelle
+ * `repondre()` depuis un message du client (« Répondre à Yassine », 0020) :
+ * le compositeur passe en « Client » et le champ prend le focus.
  *
  * Quitter la fiche avec une note ou une photo pas encore publiée demande
  * confirmation (« Abandonner la note ? ») au lieu de la perdre en silence.
@@ -22,7 +24,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from 'expo-router';
 import { usePreventRemove, type NavigationAction } from 'expo-router/react-navigation';
-import { useImperativeHandle, useState, type Ref } from 'react';
+import { useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { Keyboard, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 import { Bouton, Carte, FeuilleConfirmation, Icone, Legende, impulsion, type NomIcone } from '@/components/ui';
@@ -37,7 +39,11 @@ import { useRetirerNote } from './FeuilleNote';
 
 type Piece = { uri: string; video?: boolean };
 
-export type ComposerRef = { photographier: () => void };
+export type ComposerRef = {
+  photographier: () => void;
+  /** Réponse à un message du client : note visible client, champ prêt à écrire */
+  repondre: () => void;
+};
 
 type Props = {
   interventionId: string;
@@ -106,6 +112,7 @@ export function Composer({ interventionId, onErreur, client, onAvis, ref }: Prop
   const [visibleClient, setVisibleClient] = useState(false);
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [envoi, setEnvoi] = useState(false);
+  const champ = useRef<TextInput>(null);
   const navigation = useNavigation();
   /** Départ de la fiche suspendu le temps de confirmer l’abandon du brouillon */
   const [depart, setDepart] = useState<NavigationAction | null>(null);
@@ -162,7 +169,14 @@ export function Composer({ interventionId, onErreur, client, onAvis, ref }: Prop
     }
   }
 
-  useImperativeHandle(ref, () => ({ photographier: () => void photographier() }));
+  useImperativeHandle(ref, () => ({
+    photographier: () => void photographier(),
+    repondre: () => {
+      setVisibleClient(true);
+      // Le champ prend le focus : le clavier s’ouvre et la fiche défile jusqu’à lui.
+      setTimeout(() => champ.current?.focus(), 50);
+    },
+  }));
 
   async function publier() {
     if (vide || envoi) return;
@@ -206,6 +220,7 @@ export function Composer({ interventionId, onErreur, client, onAvis, ref }: Prop
           </View>
         ) : null}
         <TextInput
+          ref={champ}
           value={texte}
           onChangeText={setTexte}
           multiline

@@ -23,7 +23,7 @@ const BLOCS: Bloc[] = [
   {
     titre: 'Ce qui est enregistré',
     texte:
-      `L’identité des membres de l’équipe (prénom, nom, e-mail), les informations du garage, les clients et véhicules saisis par le garage (nom, téléphone, e-mail, plaque, kilométrage), les interventions avec leurs commentaires, photos et vidéos, et les SMS envoyés aux clients. Avec le réceptionniste téléphonique : le numéro de l’appelant, ce qu’il a indiqué, le résumé de l’appel et, pour que le garage puisse la réécouter, l’enregistrement et la transcription de la conversation, gardés ${CONSERVATION_ECOUTE_JOURS} jours puis effacés. Pour le bon fonctionnement du service : les jours d’utilisation, la version de l’app, le modèle du téléphone et l’autorisation des notifications.`,
+      `L’identité des membres de l’équipe (prénom, nom, e-mail), les informations du garage, les clients et véhicules saisis par le garage (nom, téléphone, e-mail, plaque, kilométrage), les interventions avec leurs commentaires, photos et vidéos, les messages que les clients écrivent au garage depuis leur page de suivi, et les SMS envoyés aux clients. Avec le réceptionniste téléphonique : le numéro de l’appelant, ce qu’il a indiqué, le résumé de l’appel et, pour que le garage puisse la réécouter, l’enregistrement et la transcription de la conversation, gardés ${CONSERVATION_ECOUTE_JOURS} jours puis effacés ; pour le membre qui l’active, son numéro de portable, qui ne sert qu’à lui transférer les appels et que ni le gérant ni ses collègues ne voient. Pour le bon fonctionnement du service : les jours d’utilisation, la version de l’app, le modèle du téléphone et l’autorisation des notifications.`,
   },
   {
     titre: 'Pourquoi',
@@ -35,7 +35,14 @@ const BLOCS: Bloc[] = [
     texte:
       BACKEND === 'demo'
         ? 'En mode démonstration, tout reste sur ce téléphone. Rien n’est envoyé à un serveur.'
-        : 'Sur des serveurs situés dans l’Union européenne (Supabase, région Paris). Les notifications passent par Apple et Expo, les e-mails par Resend, les SMS par Octopush, les appels du réceptionniste par Twilio et ElevenLabs : la liste complète et les garanties figurent dans la politique de confidentialité.',
+        : 'Sur des serveurs situés dans l’Union européenne (Supabase, région Paris). Les notifications passent par Apple et Expo, les e-mails par Resend, les SMS par Octopush, les appels du réceptionniste par Twilio et ElevenLabs, la rédaction des SMS par l’IA (si le gérant l’active) par Mistral AI : la liste complète et les garanties figurent dans la politique de confidentialité.',
+  },
+  {
+    titre: 'Rédaction des SMS par l’IA',
+    texte:
+      BACKEND === 'demo'
+        ? 'En mode démonstration, la rédaction est simulée sur ce téléphone : rien n’est envoyé à une IA.'
+        : 'Désactivée tant qu’un gérant ne l’a pas autorisée (Profil, Le garage). Quand un membre touche « Rédiger avec l’IA », Mistral AI (serveurs en Europe) reçoit l’objet du message, l’état de l’intervention, l’intitulé des travaux et la note de l’équipe, sans nom, numéro, e-mail, plaque ni montant. Le texte proposé est toujours relu avant l’envoi. Le gérant retire l’accord au même endroit, à tout moment.',
   },
   {
     titre: 'Combien de temps',

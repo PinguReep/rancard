@@ -23,6 +23,7 @@ import type {
   Garage,
   Intervention,
   Membre,
+  MessageClient,
   MotifAnnulation,
   Notification,
   Origine,
@@ -33,6 +34,10 @@ import type {
   Statut,
   Vehicule,
 } from '@/domain/types';
+import type { TransfertPortable } from '@/domain/portable';
+import type { IntentionSms } from '@/lib/redaction';
+
+export type { TransfertPortable } from '@/domain/portable';
 
 export type Identifiants = { email: string; motDePasse: string };
 
@@ -134,6 +139,8 @@ export type Snapshot = {
   evenements: Evenement[];
   appels: Appel[];
   notifications: Notification[];
+  /** Messages des clients écrits sur leur page de suivi (0020), en lecture seule */
+  messagesClients: MessageClient[];
 };
 
 /**
@@ -235,6 +242,15 @@ export interface Repo {
   }): Promise<Commentaire>;
   /** Enregistre l'envoi (réel ou simulé) du SMS « véhicule prêt » */
   envoyerSmsPret(interventionId: string, auteurId: string, texte: string): Promise<void>;
+  /**
+   * Rédaction du texte d’un SMS au client par l’IA (option `redactionIa`,
+   * fonction Edge `redaction`, Mistral AI) : rien n’est envoyé, le texte
+   * revient dans le champ pour être relu et modifié. `ia: false` : repli
+   * sur le texte habituel (plafond du jour, service indisponible). Lève si
+   * l’option n’est pas active ou si l’intervention n’est pas visible.
+   * Démonstration : rédaction simulée sur le téléphone, sans réseau.
+   */
+  redigerSms(interventionId: string, intention: IntentionSms, note?: string): Promise<RedactionSms>;
 
   // ── v2c
   /** « Accord reçu » (J6) : seule façon de lever une attente d’accord. Montant ignoré sans voirPrix. */
@@ -293,13 +309,41 @@ export interface Repo {
   /** « Tester la sonnerie » : le serveur fait sonner les appareils du membre connecté. */
   testerSonnerie(): Promise<void>;
 
+  // ── Transfert vers les portables (option réceptionniste, 0019)
+  /** Portable de transfert et accord du membre connecté (accord désactivé par défaut). */
+  transfertPortable(): Promise<TransfertPortable>;
+  /**
+   * Règle le portable et l’accord du membre connecté. `numero` vide : le
+   * numéro est retiré (toujours permis). Sinon : gérant ou permission
+   * `appels`, portable français (06, 07) ; accepter exige la prestation
+   * réceptionniste. Rejette avec un message lisible ; renvoie le réglage
+   * enregistré (numéro normalisé en E.164).
+   */
+  reglerTransfertPortable(r: { numero: string | null; accepte: boolean }): Promise<TransfertPortable>;
+  /** Gérant : membres qui reçoivent les appels transférés sur leur portable (identifiants, jamais le numéro). */
+  transfertsEquipe(): Promise<string[]>;
+
   // ── Équipe et réglages (gérant)
   // Un membre renvoyé avec `invitationEnAttente` peut porter l'id de l'invitation
   // (pas encore d'utilisateur) ; `modifierMembre(id, { actif: false })` la révoque.
   inviterMembre(n: NouveauMembre): Promise<Membre>;
   modifierMembre(id: string, patch: Partial<Pick<Membre, 'prenom' | 'nom' | 'role' | 'poste' | 'permissions' | 'actif'>>): Promise<void>;
   modifierGarage(patch: Partial<Omit<Garage, 'id'>>): Promise<void>;
+  /**
+   * Accord (`actif`, après l’écran d’accord, version `VERSION_ACCORD_IA`) ou
+   * retrait de la rédaction des SMS par l’IA, par un gérant ; tracé (qui,
+   * quand) par `regler_redaction_ia` (0021).
+   */
+  reglerRedactionIa(actif: boolean): Promise<void>;
+  /** Dernier accord ou retrait de la rédaction par l’IA (gérant) ; null s’il n’y en a jamais eu. */
+  accordRedactionIa(): Promise<AccordRedactionIa | null>;
 }
+
+/** Texte rédigé pour un SMS : par l’IA (`ia`), ou le texte habituel en repli. */
+export type RedactionSms = { texte: string; ia: boolean; raison?: 'plafond' | 'indisponible' };
+
+/** Trace de l’accord de la rédaction par l’IA (`redaction_ia_accords`, 0021). */
+export type AccordRedactionIa = { actif: boolean; membreId: string | null; le: string; version: string | null };
 
 export type Backend = 'demo' | 'supabase';
 

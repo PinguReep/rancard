@@ -11,21 +11,30 @@
  * aussi. L'envoi automatique (avec les relances SMS) et le texte du SMS
  * « véhicule prêt » (qui sert aussi à l'app SMS du téléphone) restent au
  * gérant.
+ *
+ * Rédaction des SMS par l’IA (0021) : un choix du gérant, pas une
+ * prestation. L’activer ouvre l’écran d’accord (`FeuilleAccordIa`, règle
+ * App Store 5.1.2(i)) ; l’accord et le retrait sont tracés par la base
+ * (qui, quand), et la dernière trace s’affiche sous l’interrupteur.
  */
 
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import { Stack } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avis, useAvis } from '@/components/intervention/Avis';
+import { FeuilleAccordIa } from '@/components/profil/FeuilleAccordIa';
 import { LigneHoraire, ORDRE_JOURS, type Plage } from '@/components/profil/LigneHoraire';
 import { LigneInterrupteur } from '@/components/profil/LigneInterrupteur';
 import { LignePrestation } from '@/components/profil/LignePrestation';
 import { useMembreCourant } from '@/components/profil/useMembreCourant';
 import { Carte, Champ, Ecran, Etiquette, Groupe, Legende, Section, Texte, Vide, impulsion } from '@/components/ui';
 import { BACKEND, repo } from '@/data';
+import type { AccordRedactionIa } from '@/data/repo';
 import { estGerant } from '@/domain/permissions';
 import { aPrestation, LIBELLES_PRESTATION, NON_INCLUS } from '@/domain/prestations';
 import type { Garage } from '@/domain/types';
@@ -49,6 +58,24 @@ export default function ReglagesGarage() {
   const [erreurExpediteur, setErreurExpediteur] = useState<string | null>(null);
   const [texteSms, setTexteSms] = useState(garage.texteSmsPret);
   const [avis, montrerAvis] = useAvis();
+  const membres = useDonnees((s) => s.membres);
+  const redactionIa = garage.options.redactionIa === true;
+  const [feuilleIa, setFeuilleIa] = useState(false);
+  const [accordIa, setAccordIa] = useState<AccordRedactionIa | null>(null);
+
+  // Trace du dernier accord ou retrait (qui, quand), relue à chaque changement de l’option.
+  useEffect(() => {
+    let vivant = true;
+    repo()
+      .accordRedactionIa()
+      .then((a) => {
+        if (vivant) setAccordIa(a);
+      })
+      .catch(() => {});
+    return () => {
+      vivant = false;
+    };
+  }, [redactionIa]);
 
   if (!estGerant(moi)) {
     return (
@@ -65,6 +92,25 @@ export default function ReglagesGarage() {
 
   function options(patch: Partial<Garage['options']>) {
     enregistrer({ options: { ...garage.options, ...patch } });
+  }
+
+  /** Activer passe par l’écran d’accord ; retirer est immédiat, pour toute l’équipe. */
+  function reglerIa(actif: boolean) {
+    if (actif) {
+      setFeuilleIa(true);
+      return;
+    }
+    repo()
+      .reglerRedactionIa(false)
+      .then(() => montrerAvis('Rédaction par l’IA retirée'))
+      .catch((e: unknown) => montrerAvis((e instanceof Error && e.message) || 'Le retrait n’a pas pu être enregistré.'));
+  }
+
+  async function autoriserIa() {
+    await repo().reglerRedactionIa(true);
+    impulsion('succes');
+    setFeuilleIa(false);
+    montrerAvis('Rédaction par l’IA activée');
   }
 
   function horaire(jour: number, plage: Plage | null) {
@@ -141,6 +187,12 @@ export default function ReglagesGarage() {
   const speciaux = mesure.horsGsm.map((c) => `« ${c} »`).join(', ');
   // Lu au rendu : ne change qu'entre deux sessions (voir data/index.ts).
   const parRencar = BACKEND === 'supabase';
+  // Dernier accord ou retrait de la rédaction par l’IA, s’il correspond à l’état affiché.
+  const parQui = accordIa?.membreId ? membres.find((m) => m.id === accordIa.membreId) : undefined;
+  const traceIa =
+    accordIa && accordIa.actif === redactionIa
+      ? `${redactionIa ? 'Activée' : 'Retirée'} le ${format(new Date(accordIa.le), 'd MMMM yyyy', { locale: fr })}${parQui ? ` par ${`${parQui.prenom} ${parQui.nom}`.trim()}` : ''}.`
+      : null;
   // Sans relances SMS, l’expéditeur ne sert à rien : affiché grisé, non modifiable.
   const expediteurModifiable = sms && !parRencar;
 
@@ -236,12 +288,23 @@ export default function ReglagesGarage() {
           )}
         </Carte>
 
+        <Groupe titre="Rédaction des SMS par l’IA" note={redactionIa ? 'Le retrait est immédiat pour toute l’équipe.' : (traceIa ?? undefined)}>
+          <LigneInterrupteur
+            titre="Rédiger avec l’IA"
+            aide={redactionIa ? `${traceIa ?? 'Activée.'} Mistral AI, serveurs en Europe.` : 'L’IA propose le texte des SMS au client ; l’équipe le relit avant de l’envoyer.'}
+            valeur={redactionIa}
+            onChange={reglerIa}
+            derniere
+          />
+        </Groupe>
+
         <Groupe titre="Réceptionniste téléphonique" note={aPrestation(garage, 'receptionniste') ? 'Les appels traités s’affichent dans l’onglet Appels.' : undefined}>
           <LignePrestation titre={LIBELLES_PRESTATION.receptionniste} incluse={aPrestation(garage, 'receptionniste')} derniere />
         </Groupe>
 
         <Legende className="ml-1">Les modifications sont enregistrées au fur et à mesure.</Legende>
       </KeyboardAwareScrollView>
+      <FeuilleAccordIa ouverte={feuilleIa} onFermer={() => setFeuilleIa(false)} onAutoriser={autoriserIa} />
       <Avis texte={avis} flottant />
     </Ecran>
   );

@@ -7,6 +7,9 @@
  * reste (priorité, mécanicien, rendez-vous, retour prévu, lien de suivi,
  * retours, annulation) est rangé dans le menu « ⋯ ».
  *
+ * Un message du client écrit sur sa page de suivi (0020) arrive dans le
+ * fil ; « Répondre à Yassine » passe le compositeur en note visible client.
+ *
  * Un employé sans « Voir tout le planning » n’ouvre que ses propres
  * interventions. Les notifications qui visent la fiche passent en lues à
  * son ouverture. Tous les gestes de statut et de blocage passent par
@@ -30,6 +33,7 @@ import { EnTeteFiche } from '@/components/intervention/EnTeteFiche';
 import { FeuilleAnnulation } from '@/components/intervention/FeuilleAnnulation';
 import { FeuilleAttribution } from '@/components/intervention/FeuilleAttribution';
 import { FeuilleDeplacer, peutDeplacer } from '@/components/intervention/FeuilleDeplacer';
+import { FeuilleEcrireClient } from '@/components/intervention/FeuilleEcrireClient';
 import { FeuilleKilometrage } from '@/components/intervention/FeuilleKilometrage';
 import { FeuilleMenu } from '@/components/intervention/FeuilleMenu';
 import { FeuilleRetourPrevu } from '@/components/intervention/FeuilleRetourPrevu';
@@ -70,6 +74,7 @@ export default function FicheIntervention() {
       equipe: s.membres.filter((m) => m.actif && !m.invitationEnAttente),
       commentaires: s.commentaires.filter((c) => c.interventionId === i.id).map((c) => ({ ...c })),
       evenements: s.evenements.filter((e) => e.interventionId === i.id).map((e) => ({ ...e })),
+      messages: s.messagesClients.filter((m) => m.interventionId === i.id).map((m) => ({ ...m })),
       historique: interventionsVisibles(s.interventions, membre, p)
         .filter((x) => x.vehiculeId === i.vehiculeId && x.id !== i.id)
         .map((x) => ({ ...x }))
@@ -88,6 +93,7 @@ export default function FicheIntervention() {
   const [kilometrage, setKilometrage] = useState(false);
   const [menu, setMenu] = useState(false);
   const [annulation, setAnnulation] = useState(false);
+  const [ecrireClient, setEcrireClient] = useState(false);
   const composer = useRef<ComposerRef>(null);
   const defilement = useRef<KeyboardAwareScrollViewRef>(null);
   const [yNotes, setYNotes] = useState(0);
@@ -141,6 +147,7 @@ export default function FicheIntervention() {
           vehicule={vehicule}
           mecanicien={mecanicien}
           sms={mobile}
+          onEcrire={garage.options.redactionIa ? () => setEcrireClient(true) : undefined}
           onAttribuer={p.voirTout ? () => setAttribution(true) : undefined}
           onDeplacer={deplacable ? () => setDeplacement(true) : undefined}
           onRetourPrevu={p.creer ? () => setRetourPrevu(true) : undefined}
@@ -161,7 +168,15 @@ export default function FicheIntervention() {
             Notes et photos
           </Etiquette>
           <View className="gap-2">
-            <FilSuivi commentaires={fiche.commentaires} evenements={evenements} membres={fiche.membres} client={client} onAvis={montrerAvis} />
+            <FilSuivi
+              commentaires={fiche.commentaires}
+              evenements={evenements}
+              membres={fiche.membres}
+              client={client}
+              onAvis={montrerAvis}
+              messages={fiche.messages}
+              onRepondre={() => composer.current?.repondre()}
+            />
             <Composer ref={composer} interventionId={i.id} onErreur={montrerAvis} client={client} onAvis={montrerAvis} />
           </View>
         </View>
@@ -252,6 +267,16 @@ export default function FicheIntervention() {
         horaires={garage.horaires}
         onAvis={montrerAvis}
       />
+      {client?.telephone && mobile ? (
+        <FeuilleEcrireClient
+          ouverte={ecrireClient}
+          onFermer={() => setEcrireClient(false)}
+          intervention={i}
+          client={client}
+          vehicule={vehicule}
+          telephone={client.telephone}
+        />
+      ) : null}
       <FeuilleKilometrage
         ouverte={kilometrage}
         onFermer={() => setKilometrage(false)}

@@ -29,6 +29,7 @@ import type {
   Intervention,
   IssueAppel,
   Membre,
+  MessageClient,
   MotifAnnulation,
   Notification,
   Origine,
@@ -251,6 +252,15 @@ export function versTransfert(l: LigneAppel): TransfertAppel | undefined {
   };
 }
 
+/** Message du client écrit sur sa page de suivi (0020), en lecture seule pour l’app. */
+export type LigneMessageClient = {
+  id: string;
+  garage_id: string;
+  intervention_id: string;
+  texte: string;
+  cree_le: string;
+};
+
 /** « Lue » n’est pas sur la ligne : c’est par membre, dans notifications_lues. */
 export type LigneNotification = {
   id: string;
@@ -389,6 +399,7 @@ export function versGarage(l: LigneGarage): Garage {
       receptionniste: l.options?.receptionniste === true,
       sms: l.options?.sms === true,
       smsAutomatique: l.options?.smsAutomatique === true,
+      redactionIa: l.options?.redactionIa === true,
     },
     texteSmsPret: l.texte_sms_pret,
   };
@@ -539,6 +550,16 @@ export function versCommentaire(l: LigneCommentaire, urls: ReadonlyMap<string, s
     ...(l.evenement_id ? { evenementId: l.evenement_id } : {}),
     ...(l.automatique ? { automatique: true } : {}),
     ...(l.retiree_le ? { retireeLe: iso(l.retiree_le), retireePar: l.retiree_par ?? null } : {}),
+  };
+}
+
+export function versMessageClient(l: LigneMessageClient): MessageClient {
+  return {
+    id: l.id,
+    garageId: l.garage_id,
+    interventionId: l.intervention_id,
+    texte: l.texte,
+    creeLe: iso(l.cree_le),
   };
 }
 

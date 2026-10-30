@@ -22,10 +22,16 @@
  * - La trace du montant n’est rendue qu’avec `voirPrix` (le serveur ne la
  *   livre pas aux autres).
  * - Une note visible du client se retire de sa page pendant 10 minutes,
- *   par son auteur ou un gérant (P1) : lien « Retirer de la page client »
+ *   par son auteur ou un gérant (P1) : lien « Retirer de la page client »
  *   sous la note, appui long ou action d’accessibilité, puis `FeuilleNote`.
- *   Une note retirée le dit : « Retirée de la page client par Elias à
- *   11:24 ».
+ *   Une note retirée le dit : « Retirée de la page client par Elias à
+ *   11:24 ».
+ * - Un message écrit par le client sur sa page de suivi (« Répondre au
+ *   garage », 0020) prend sa place dans le temps, sur fond bleu pâle, sous
+ *   « Message du client » : jamais confondu avec une note de l’équipe. Tant
+ *   que le dernier attend une réponse (aucune note visible de l’équipe
+ *   après lui), il porte le geste suivant : « Répondre à Yassine », qui
+ *   prépare une note visible client dans le compositeur.
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
@@ -33,9 +39,10 @@ import { Pressable, Text, View, type TextStyle } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { Carte, Icone, Legende, Texte, impulsion } from '@/components/ui';
+import { messageARepondre } from '@/domain/messages-clients';
 import { FENETRE_RETRAIT_NOTE_MIN, peutRetirerNote } from '@/domain/permissions';
 import { RANG_EVENEMENT, STATUTS, phraseClientEvenement, texteEvenement } from '@/domain/statuts';
-import type { Client, Commentaire, Evenement, Membre, Statut } from '@/domain/types';
+import type { Client, Commentaire, Evenement, Membre, MessageClient, Statut } from '@/domain/types';
 import { dePrenom, heure, horodatageFil, jourCourt, memeJour } from '@/lib/format';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
 import { useTheme } from '@/theme/tokens';
@@ -50,13 +57,18 @@ type Props = {
   membres: Membre[];
   /** Client de l’intervention : le retrait nomme sa page (« Retirer cette note de la page de Hugo ? ») */
   client?: Client;
-  /** Avis de la fiche (résultat d’un retrait) ; sans lui, l’avis s’affiche sous le fil */
+  /** Avis de la fiche (résultat d’un retrait) ; sans lui, l’avis s’affiche sous le fil */
   onAvis?: (texte: string, action?: ActionAvis) => void;
+  /** Messages du client écrits sur sa page de suivi (0020) */
+  messages?: MessageClient[];
+  /** « Répondre à Yassine » : prépare une note visible client dans le compositeur */
+  onRepondre?: () => void;
 };
 
 type LigneFil =
   | { cle: string; date: string; rang: number; type: 'note'; c: Commentaire }
-  | { cle: string; date: string; rang: number; type: 'evenement'; e: Evenement; client: string | null };
+  | { cle: string; date: string; rang: number; type: 'evenement'; e: Evenement; client: string | null }
+  | { cle: string; date: string; rang: number; type: 'message'; m: MessageClient };
 
 /** Écart au-delà duquel une note n’est plus l’écho automatique d’un statut (lignes antérieures à la v2c). */
 const ECART_NOTE_AUTOMATIQUE_MS = 5000;
@@ -64,6 +76,8 @@ const ECART_NOTE_AUTOMATIQUE_MS = 5000;
 const ECART_ACCORD_MS = 1000;
 /** Les notes passent après les événements du même instant. */
 const RANG_NOTE = 100;
+/** Un message du client passe après les notes du même instant. */
+const RANG_MESSAGE = 200;
 /** Heures alignées en colonne, à droite. */
 const CHIFFRES: TextStyle = { fontVariant: ['tabular-nums'] };
 
@@ -180,6 +194,57 @@ function LigneEvenement({ texte, date, client, maintenant }: { texte: string; da
   );
 }
 
+type PropsMessage = {
+  m: MessageClient;
+  maintenant: Date;
+  /** Prénom du client, pour « Répondre à Yassine » */
+  prenom: string | null;
+  /** Le message attend une réponse : le geste suivant est proposé dessous */
+  onRepondre?: () => void;
+};
+
+/** Message écrit par le client sur sa page de suivi : fond bleu pâle, jamais confondu avec une note de l’équipe. */
+function LigneMessage({ m, maintenant, prenom, onRepondre }: PropsMessage) {
+  const t = useTheme();
+  const h = horodatageFil(m.creeLe, maintenant);
+  const libelleRepondre = prenom ? `Répondre à ${prenom}` : 'Répondre au client';
+  return (
+    <Animated.View entering={FadeIn.duration(200)}>
+      <View className="rounded-2xl border border-accent-soft bg-accent-soft px-4 py-3 dark:border-accent-softdark dark:bg-accent-softdark">
+        <View
+          accessible
+          accessibilityLabel={`Message du client${prenom ? ` ${prenom}` : ''}, ${h}, écrit sur sa page de suivi\u00a0: ${m.texte}`}>
+          <View className="flex-row items-center gap-1.5">
+            <Icone nom="message" taille={14} couleur={t.accent} />
+            <Text maxFontSizeMultiplier={1.3} className="shrink text-[13px] font-semibold text-accent dark:text-accent-dark" numberOfLines={1}>
+              Message du client
+            </Text>
+            <View className="flex-1" />
+            <Legende style={CHIFFRES}>{h}</Legende>
+          </View>
+          <Texte className="mt-1">{m.texte}</Texte>
+        </View>
+        {onRepondre ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={libelleRepondre}
+            accessibilityHint="Prépare une note visible sur la page de suivi du client"
+            onPress={() => {
+              impulsion('leger');
+              onRepondre();
+            }}
+            className="-mb-2 mt-0.5 min-h-[44px] flex-row items-center gap-1.5 self-start active:opacity-60">
+            <Icone nom="oeil" taille={14} couleur={t.accent} />
+            <Text maxFontSizeMultiplier={1.5} className="text-[15px] font-semibold text-accent dark:text-accent-dark">
+              {libelleRepondre}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </Animated.View>
+  );
+}
+
 type PropsNote = {
   c: Commentaire;
   maintenant: Date;
@@ -268,10 +333,10 @@ function LigneNote({ c, maintenant, retireePar, retirable, onRetirer }: PropsNot
   );
 }
 
-export function FilSuivi({ commentaires, evenements, membres, client, onAvis }: Props) {
+export function FilSuivi({ commentaires, evenements, membres, client, onAvis, messages = [], onRepondre }: Props) {
   const membre = useMembre();
   const { voirPrix } = usePermissions();
-  const interventionId = evenements[0]?.interventionId ?? commentaires[0]?.interventionId;
+  const interventionId = evenements[0]?.interventionId ?? commentaires[0]?.interventionId ?? messages[0]?.interventionId;
   // Prénom du client : la feuille et l’avis nomment sa page.
   const prenomDonnees = useDonnees((s) => {
     const i = interventionId ? s.interventions.find((x) => x.id === interventionId) : undefined;
@@ -319,7 +384,10 @@ export function FilSuivi({ commentaires, evenements, membres, client, onAvis }: 
   for (const c of commentaires) {
     if (!absorbees.has(c.id)) lignes.push({ cle: `k-${c.id}`, date: c.creeLe, rang: RANG_NOTE, type: 'note', c });
   }
+  for (const m of messages) lignes.push({ cle: `m-${m.id}`, date: m.creeLe, rang: RANG_MESSAGE, type: 'message', m });
   lignes.sort((a, b) => temps(a.date) - temps(b.date) || a.rang - b.rang);
+  // Geste suivant : seulement sous le dernier message, tant qu’aucune note visible de l’équipe ne l’a suivi.
+  const aRepondre = interventionId ? messageARepondre(messages, commentaires, interventionId) : null;
 
   if (lignes.length === 0) {
     return null;
@@ -328,7 +396,15 @@ export function FilSuivi({ commentaires, evenements, membres, client, onAvis }: 
   return (
     <View className="gap-2">
       {lignes.map((x) =>
-        x.type === 'note' ? (
+        x.type === 'message' ? (
+          <LigneMessage
+            key={x.cle}
+            m={x.m}
+            maintenant={maintenant}
+            prenom={prenomClient}
+            onRepondre={onRepondre && aRepondre?.id === x.m.id ? onRepondre : undefined}
+          />
+        ) : x.type === 'note' ? (
           <LigneNote
             key={x.cle}
             c={x.c}

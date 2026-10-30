@@ -1,5 +1,5 @@
 /**
- * « Recevoir les appels » : ce téléphone sonne quand le réceptionniste passe
+ * « Recevoir les appels dans l’app » : ce téléphone sonne quand le réceptionniste passe
  * un appel à l'équipe (réglage de chaque membre, gardé côté serveur), et
  * « Tester la sonnerie » une fois activé. L'activation demande l'accès au
  * micro : un appel décroché depuis l'écran verrouillé ne pourrait pas le
@@ -76,7 +76,7 @@ export function LigneSonnerie({ membreId }: { membreId: string }) {
   return (
     <>
       <LigneInterrupteur
-        titre="Recevoir les appels"
+        titre="Recevoir les appels dans l’app"
         aide={aides[inscription]}
         valeur={active || inscription === 'en_cours'}
         desactive={inscription === 'indisponible' || inscription === 'inconnue' || inscription === 'en_cours'}

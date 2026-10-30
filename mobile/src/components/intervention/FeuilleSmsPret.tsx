@@ -15,24 +15,32 @@
  * au client depuis l’app SMS du téléphone : message « véhicule prêt » du
  * garage et lien de suivi, préremplis.
  *
+ * Rédaction par l’IA (option `redactionIa` du garage) : le texte devient
+ * un champ, avec « Rédiger avec l’IA » (`RedactionSms`) ; ce qui part est
+ * le texte relu du champ. Avec les relances SMS, seulement pour le gérant
+ * (un texte modifié lui est réservé par la fonction `sms`).
+ *
  * Client sans mobile valide (D6, mobile facultatif) : pas de SMS possible,
  * la feuille le dit et ne propose que le passage en « Véhicule prêt » ;
  * la carte portera « À prévenir ».
  */
 
-import { useState, type ReactElement } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
 import { Linking, Pressable, View } from 'react-native';
 
 import { mobileJoignable } from '@/components/clients/outils';
 import { Bouton, Feuille, GARDE_MS, GARDE_PRET_MS, Icone, Legende, Secondaire, Texte, armerGarde, impulsion } from '@/components/ui';
 import { repo } from '@/data';
 import { fermeA } from '@/domain/echeances';
+import { estGerant } from '@/domain/permissions';
 import { aPrestation, NON_INCLUS } from '@/domain/prestations';
 import type { Client, Intervention, Vehicule } from '@/domain/types';
 import { appelClient, formaterTelephone, gabaritSms, lettresRemplacees, mesureSms, nomClient, normaliserSms, titreVoiture } from '@/lib/format';
 import { lienSuivi, smsHref } from '@/lib/suivi';
 import { useDonnees, useMembre } from '@/state/session';
 import { useTheme } from '@/theme/tokens';
+
+import { AuDessusDuClavier, RedactionSms } from './RedactionSms';
 
 export type CibleSms = { intervention: Intervention; client?: Client; vehicule?: Vehicule };
 
@@ -65,15 +73,28 @@ export function FeuilleSmsPret({ cible, onFermer, onFait, onErreur }: Props) {
   const texte = cible ? gabaritSms(garage.texteSmsPret, { prenom: client?.prenom ?? '', garage: garage.nom }) : '';
   // Ce qui part : ponctuation ramenée au GSM-7 et lettres hors GSM-7 sans
   // accent (« François » → « Francois »), même règle que le serveur.
-  const apercu = normaliserSms(texte);
+  const smsPossible = peutRecevoirSms(client);
+  // Rédaction par l’IA (option du garage) : le texte devient un champ à relire et à modifier. Avec
+  // les relances SMS, un texte modifié est réservé au gérant (fonction `sms`) : l’employé garde le
+  // gabarit du garage, et rédige avec l’IA depuis la bulle « Écrire un SMS » de la fiche.
+  const ia = garage.options.redactionIa === true && smsPossible && Boolean(client) && (!relancesSms || estGerant(membre));
+  // Texte du champ ; null tant que rien n’a changé (gabarit du garage).
+  const [saisie, setSaisie] = useState<string | null>(null);
+  useEffect(() => {
+    setSaisie(null);
+  }, [cible]);
+  const ecrit = ia ? (saisie ?? texte) : texte;
+  const vide = !ecrit.trim();
+  const apercu = normaliserSms(ecrit);
   const { segments } = mesureSms(apercu);
-  const remplacees = lettresRemplacees(texte);
+  const remplacees = lettresRemplacees(ecrit);
   // Prénom facultatif : le nom suffit (« Prévenir Arnaud », « Écrire à Arnaud »).
   const nom = nomClient(client, 'le client');
   const qui = appelClient(client);
-  const smsPossible = peutRecevoirSms(client);
   // Sans relances SMS : le message et le lien de suivi partent de l’app SMS du téléphone.
-  const messageTelephone = cible ? `${texte}\n${lienSuivi(cible.intervention.suiviToken)}` : '';
+  // Un texte rédigé qui porte déjà le lien ne le répète pas.
+  const lien = cible ? lienSuivi(cible.intervention.suiviToken) : '';
+  const messageTelephone = cible ? (ecrit.includes(lien) ? ecrit.trim() : `${ecrit.trim()}\n${lien}`) : '';
 
   /** Passe en Prêt, puis fait ce que le choix demande ; la garde suit, succès ou échec. */
   async function valider(choix: FinSms) {
@@ -90,7 +111,8 @@ export function FeuilleSmsPret({ cible, onFermer, onFait, onErreur }: Props) {
       let fin: FinSms = choix;
       if (choix === 'sms') {
         try {
-          await repo().envoyerSmsPret(cible.intervention.id, membre.id, texte);
+          // Le texte relu dans le champ (rédaction par l’IA), sinon le gabarit du garage.
+          await repo().envoyerSmsPret(cible.intervention.id, membre.id, ia ? ecrit.trim() : texte);
         } catch {
           // Le statut a changé : l’avis dit que le client n’a pas reçu de SMS (la carte portera « À prévenir »).
           fin = 'sans';
@@ -169,15 +191,29 @@ export function FeuilleSmsPret({ cible, onFermer, onFait, onErreur }: Props) {
         <Secondaire>
           {`La voiture passe en « Véhicule prêt ». Écrivez au ${formaterTelephone(client.telephone)} depuis l’app SMS de ce téléphone, lien de suivi compris.`}
         </Secondaire>
-        <View className="mt-3 rounded-2xl bg-surface2 dark:bg-surface2-dark p-4">
-          <Texte>{messageTelephone}</Texte>
-        </View>
+        {ia ? (
+          <View className="mt-3">
+            <RedactionSms
+              key={cible.intervention.id}
+              interventionId={cible.intervention.id}
+              intention="pret"
+              texte={ecrit}
+              onTexte={setSaisie}
+              qui={qui}
+              aide={ecrit.includes(lien) ? undefined : 'Le lien de suivi est ajouté à la fin du message.'}
+            />
+          </View>
+        ) : (
+          <View className="mt-3 rounded-2xl bg-surface2 dark:bg-surface2-dark p-4">
+            <Texte>{messageTelephone}</Texte>
+          </View>
+        )}
         <View className="mt-3 flex-row gap-2">
           <View className="flex-1">
             <Bouton
               onPress={() => valider('telephone')}
               chargement={envoi === 'telephone'}
-              desactive={envoi === 'sans'}
+              desactive={envoi === 'sans' || vide}
               accessibilityLabel={`Passer en véhicule prêt et écrire à ${qui} depuis l’app SMS du téléphone`}>
               Écrire depuis mes SMS
             </Bouton>
@@ -204,9 +240,16 @@ export function FeuilleSmsPret({ cible, onFermer, onFait, onErreur }: Props) {
           La voiture passe en « Véhicule prêt ». Envoyer le SMS au {formaterTelephone(client.telephone)}
           {' ?'}
         </Secondaire>
-        <View className="mt-3 rounded-2xl bg-surface2 dark:bg-surface2-dark p-4">
-          <Texte>{apercu}</Texte>
-        </View>
+        {ia ? (
+          // Le gérant relit et modifie ; le décompte dessous suit le texte tel qu’il partira.
+          <View className="mt-3">
+            <RedactionSms key={cible.intervention.id} interventionId={cible.intervention.id} intention="pret" texte={ecrit} onTexte={setSaisie} qui={qui} />
+          </View>
+        ) : (
+          <View className="mt-3 rounded-2xl bg-surface2 dark:bg-surface2-dark p-4">
+            <Texte>{apercu}</Texte>
+          </View>
+        )}
         {fermeA(garage.horaires, new Date()) ? (
           // Le soir ou un jour fermé : le SMS part tout de suite, sa page dira le prochain jour d’ouverture.
           <Legende ton="warn" className="ml-1 mt-2">
@@ -218,7 +261,7 @@ export function FeuilleSmsPret({ cible, onFermer, onFait, onErreur }: Props) {
             <Bouton
               onPress={() => valider('sms')}
               chargement={envoi === 'sms'}
-              desactive={envoi === 'sans'}
+              desactive={envoi === 'sans' || vide}
               accessibilityLabel={`Envoyer le SMS à ${qui} et passer en véhicule prêt`}>
               Envoyer le SMS
             </Bouton>
@@ -252,7 +295,8 @@ export function FeuilleSmsPret({ cible, onFermer, onFait, onErreur }: Props) {
       titre={client ? `Prévenir ${nom}` : 'Prévenir le client'}
       legende={cible ? titreVoiture(cible.vehicule) : undefined}
       inerteMs={GARDE_MS}>
-      {contenu}
+      {/* Avec le champ du SMS, le clavier ne masque ni le texte ni les boutons. */}
+      {ia && contenu ? <AuDessusDuClavier>{contenu}</AuDessusDuClavier> : contenu}
     </Feuille>
   );
 }

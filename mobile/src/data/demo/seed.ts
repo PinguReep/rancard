@@ -18,6 +18,7 @@ import type {
   Garage,
   Intervention,
   Membre,
+  MessageClient,
   Notification,
   Vehicule,
 } from '@/domain/types';
@@ -61,7 +62,7 @@ export const garageDemo: Garage = {
     5: { de: '08:00', a: '18:30' },
     6: { de: '09:00', a: '12:00' },
   },
-  options: { site: true, sms: true, receptionniste: true, smsAutomatique: false },
+  options: { site: true, sms: true, receptionniste: true, smsAutomatique: false, redactionIa: false },
   texteSmsPret:
     'Bonjour {prenom}, votre véhicule vous attend. Vous pouvez venir le récupérer aux horaires d’ouverture. {garage}',
 };
@@ -305,9 +306,25 @@ export const appelsDemo: Appel[] = [
   },
 ];
 
+/**
+ * Messages écrits par les clients sur leur page de suivi (« Répondre au
+ * garage », 0020). Yassine demande hier soir si sa BMW sera prête lundi :
+ * personne ne lui a encore répondu (le fil propose « Répondre à Yassine »).
+ */
+export const messagesClientsDemo: MessageClient[] = [
+  {
+    id: 'mc1', garageId: GARAGE_ID, interventionId: 'i2',
+    texte: 'Bonjour, la voiture sera-t-elle prête pour lundi ? J’en ai besoin pour aller travailler.\nMerci !',
+    creeLe: avant(1, 19, 12),
+  },
+];
+
 export const notificationsDemo: Notification[] = [
   { id: 'n1', garageId: GARAGE_ID, membreId: null, type: 'rdv_site', titre: 'Nouveau rendez-vous depuis le site', detail: 'Antoine Girard · Polo · Diagnostic électronique · aujourd’hui 11h', cible: { type: 'intervention', id: 'i4' }, lue: false, creeLe: addMinutes(new Date(), -4).toISOString() },
   { id: 'n2', garageId: GARAGE_ID, membreId: null, type: 'ia', titre: 'Le réceptionniste a créé une fiche', detail: 'Nicolas Fabre · Dacia Sandero · Batterie · demain 8h30', cible: { type: 'intervention', id: 'i7' }, lue: false, creeLe: depuis(45) },
+  // Une par destinataire (titulaire, gérants) : celle de Simon, connecté en démonstration, puis celle d’Adrien.
+  { id: 'n5', garageId: GARAGE_ID, membreId: 'm-simon', type: 'message_client', titre: 'Message du client : BMW Série 3', detail: 'Yassine a écrit depuis sa page de suivi à 19:12', cible: { type: 'intervention', id: 'i2' }, lue: false, creeLe: avant(1, 19, 12) },
+  { id: 'n6', garageId: GARAGE_ID, membreId: 'm-adrien', type: 'message_client', titre: 'Message du client : BMW Série 3', detail: 'Yassine a écrit depuis sa page de suivi à 19:12', cible: { type: 'intervention', id: 'i2' }, lue: false, creeLe: avant(1, 19, 12) },
   { id: 'n4', garageId: GARAGE_ID, membreId: null, type: 'piece', titre: 'Livraison de pièce prévue', detail: 'Kit courroie de distribution BMW F20 · sous 48 h', cible: { type: 'intervention', id: 'i2' }, lue: true, creeLe: avant(1, 9) },
 ];
 
@@ -327,6 +344,7 @@ export function snapshotDemo(): Snapshot {
     evenements: evenementsDemo,
     appels: appelsDemo,
     notifications: notificationsDemo,
+    messagesClients: messagesClientsDemo,
   });
 }
 

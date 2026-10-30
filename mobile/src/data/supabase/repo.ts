@@ -28,6 +28,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createClient,
   FunctionsFetchError,
+  FunctionRegion,
   FunctionsHttpError,
   FunctionsRelayError,
   type RealtimeChannel,
@@ -38,6 +39,7 @@ import { AppState, type AppStateStatus, Platform } from 'react-native';
 
 import { AccesRefuse, ReceptionEchouee } from '@/data/erreurs';
 import {
+  type AccordRedactionIa,
   AdresseNonConfirmee,
   type Consultations,
   type Identifiants,
@@ -46,10 +48,12 @@ import {
   type NouvelleInscription,
   type NouvelleIntervention,
   type PatchIntervention,
+  type RedactionSms,
   type RenvoiReceptionniste,
   type Repo,
   type ResultatAnnulation,
   type Snapshot,
+  type TransfertPortable,
   VerificationHumaineRefusee,
 } from '@/data/repo';
 import { peut, POSTES, TOUTES_PERMISSIONS } from '@/domain/permissions';
@@ -69,6 +73,7 @@ import type {
   Statut,
   Vehicule,
 } from '@/domain/types';
+import { type IntentionSms, VERSION_ACCORD_IA } from '@/lib/redaction';
 
 import {
   compacter,
@@ -88,6 +93,7 @@ import {
   versIntervention,
   versMembre,
   versMembreDepuisInvitation,
+  versMessageClient,
   versNotification,
   versVehicule,
   type LigneAppel,
@@ -100,6 +106,7 @@ import {
   type LigneIntervention,
   type LigneInvitation,
   type LigneMembre,
+  type LigneMessageClient,
   type LigneNotification,
   type LigneNotificationLue,
   type LigneVehicule,
@@ -362,10 +369,14 @@ export class SupabaseRepo implements Repo {
    * fonction non déployée ou injoignable renvoie `absente` pour que l’appelant
    * applique son repli local.
    */
-  private async fonction<T = unknown>(nom: string, body: Record<string, unknown>): Promise<ResultatFonction<T>> {
+  private async fonction<T = unknown>(
+    nom: string,
+    body: Record<string, unknown>,
+    o: { region?: FunctionRegion } = {},
+  ): Promise<ResultatFonction<T>> {
     let reponse: { data: T | null; error: unknown };
     try {
-      reponse = await this.client.functions.invoke<T>(nom, { body });
+      reponse = await this.client.functions.invoke<T>(nom, { body, ...(o.region ? { region: o.region } : {}) });
     } catch (e) {
       reponse = { data: null, error: e };
     }
@@ -714,14 +725,22 @@ export class SupabaseRepo implements Repo {
 
   // ── Lecture
 
-  /** Toutes les lignes d’une table du garage, par pages de 1 000. */
-  private async tout<T>(table: string, options: { colonnes?: string; ordre?: string; descendant?: boolean } = {}): Promise<T[]> {
-    const { colonnes = '*', ordre = 'id', descendant = false } = options;
+  /**
+   * Toutes les lignes d’une table du garage, par pages de 1 000. `facultative` :
+   * table d’une migration pas encore appliquée partout (messages des clients,
+   * 0020) ; absente, elle compte pour vide au lieu de bloquer le chargement.
+   */
+  private async tout<T>(
+    table: string,
+    options: { colonnes?: string; ordre?: string; descendant?: boolean; facultative?: boolean } = {},
+  ): Promise<T[]> {
+    const { colonnes = '*', ordre = 'id', descendant = false, facultative = false } = options;
     const resultat: T[] = [];
     for (let depuis = 0; ; depuis += PAGE) {
       let requete = this.client.from(table).select(colonnes).eq('garage_id', this.gid).order(ordre, { ascending: !descendant });
       if (ordre !== 'id') requete = requete.order('id', { ascending: true });
       const { data, error } = await requete.range(depuis, depuis + PAGE - 1);
+      if (error && facultative && (error.code === 'PGRST205' || error.code === '42P01')) return [];
       if (error) throw erreur(error);
       const page = (data ?? []) as T[];
       resultat.push(...page);
@@ -769,6 +788,7 @@ export class SupabaseRepo implements Repo {
       appels,
       notifications,
       notificationsLues,
+      messagesClients,
     ] = await Promise.all([
         this.client
           .from('garages')
@@ -786,6 +806,9 @@ export class SupabaseRepo implements Repo {
         this.tout<LigneAppel>('appels', { ordre: 'debut', descendant: true }),
         this.tout<LigneNotification>('notifications', { ordre: 'cree_le', descendant: true }),
         this.tout<LigneNotificationLue>('notifications_lues', { ordre: 'notification_id' }),
+        // Écrits par la page de suivi (fonction Edge `suivi`), jamais par l’app ; hors du temps réel :
+        // chaque lecteur possible reçoit la notification « message_client », qui recharge.
+        this.tout<LigneMessageClient>('messages_clients', { ordre: 'cree_le', facultative: true }),
       ]);
 
     this.invitationsEnAttente = new Set(invitations.map((i) => i.id));
@@ -802,6 +825,7 @@ export class SupabaseRepo implements Repo {
       evenements: evenements.map(versEvenement),
       appels: appels.map(versAppel),
       notifications: notifications.map((n) => versNotification(n, lues)),
+      messagesClients: messagesClients.map(versMessageClient),
     };
     this.dernier = snapshot;
     return snapshot;
@@ -1152,6 +1176,22 @@ export class SupabaseRepo implements Repo {
     await this.recharger();
   }
 
+  async redigerSms(interventionId: string, intention: IntentionSms, note?: string): Promise<RedactionSms> {
+    // Exécutée à Paris (x-region, forceFunctionRegion) : la fonction refuse d’appeler Mistral ailleurs.
+    // Un refus (option retirée entre-temps, intervention invisible) remonte en erreur lisible ; une
+    // fonction absente ou injoignable laisse le texte habituel, sans alarme.
+    const r = await this.fonction<{ ok?: boolean; ia?: boolean; texte?: unknown; raison?: unknown }>(
+      'redaction',
+      { intervention_id: interventionId, intention, ...(note?.trim() ? { note: note.trim() } : {}) },
+      { region: FunctionRegion.EuWest3 },
+    );
+    if (!r.ok) return { texte: '', ia: false, raison: 'indisponible' };
+    const d = r.donnees;
+    const texte = typeof d?.texte === 'string' ? d.texte : '';
+    if (d?.ia === true && texte) return { texte, ia: true };
+    return { texte, ia: false, raison: d?.raison === 'plafond' ? 'plafond' : 'indisponible' };
+  }
+
   // ── Clients et véhicules
 
   private async insererClient(c: Parameters<Repo['creerClient']>[0]): Promise<Client> {
@@ -1387,6 +1427,52 @@ export class SupabaseRepo implements Repo {
     if (!r.ok) throw new Error(messageEchec(r, 'La sonnerie n’est pas encore branchée pour ce garage.'));
   }
 
+  // ── Transfert vers les portables (0019) : table transferts_portables (RLS : la sienne),
+  // écrite par regler_transfert_portable(), vue du gérant par transferts_equipe()
+
+  async transfertPortable(): Promise<TransfertPortable> {
+    const { data, error } = await this.client
+      .from('transferts_portables')
+      .select('numero, accepte')
+      .eq('membre_id', this.moi.id)
+      .maybeSingle();
+    if (error) {
+      // Projet sans 0019 : rien de réglé (l’enregistrement dira que la mise à jour manque).
+      if (error.code === 'PGRST205' || error.code === '42P01') return { numero: null, accepte: false };
+      throw erreur(error);
+    }
+    const ligne = data as { numero?: string | null; accepte?: boolean } | null;
+    return { numero: ligne?.numero ?? null, accepte: ligne?.accepte === true };
+  }
+
+  async reglerTransfertPortable(r: { numero: string | null; accepte: boolean }): Promise<TransfertPortable> {
+    const { data, error } = await this.client.rpc('regler_transfert_portable', {
+      p_numero: r.numero ?? '',
+      p_accepte: r.accepte,
+    });
+    if (error) {
+      if (error.code === 'PGRST202' || error.code === '42883') {
+        throw new Error('Réglage indisponible pour le moment : la mise à jour du serveur n’est pas encore installée.');
+      }
+      // Les refus de la fonction (numéro, droits, prestation) sont déjà en français.
+      if ((error.code === '42501' || error.code === '22023') && !/permission denied/i.test(error.message)) {
+        throw new Error(error.message);
+      }
+      throw erreur(error);
+    }
+    const lu = (data ?? {}) as { numero?: string | null; accepte?: boolean };
+    return { numero: lu.numero ?? null, accepte: lu.accepte === true };
+  }
+
+  async transfertsEquipe(): Promise<string[]> {
+    const r = await this.client.rpc('transferts_equipe');
+    if (r.error) {
+      if (r.error.code === 'PGRST202' || r.error.code === '42883') return [];
+      throw erreur(r.error);
+    }
+    return ((r.data ?? []) as { membre_id?: string }[]).map((l) => l.membre_id).filter((id): id is string => Boolean(id));
+  }
+
   // ── Équipe et réglages (gérant)
 
   async inviterMembre(n: NouveauMembre): Promise<Membre> {
@@ -1465,5 +1551,25 @@ export class SupabaseRepo implements Repo {
     }
     sansErreur(await this.client.from('garages').update(ligne).eq('id', this.gid));
     await this.recharger();
+  }
+
+  async reglerRedactionIa(actif: boolean): Promise<void> {
+    // Seul chemin pour l’option (garages_garde la refuse en écriture directe) : la base trace l’accord.
+    sansErreur(await this.client.rpc('regler_redaction_ia', { p_actif: actif, p_version: actif ? VERSION_ACCORD_IA : null }));
+    await this.recharger();
+  }
+
+  async accordRedactionIa(): Promise<AccordRedactionIa | null> {
+    const { data, error } = await this.client
+      .from('redaction_ia_accords')
+      .select('actif, membre_id, version, cree_le')
+      .eq('garage_id', this.gid)
+      .order('cree_le', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ actif: boolean; membre_id: string | null; version: string | null; cree_le: string }>();
+    // Table absente (0021 pas encore appliquée) ou lecture refusée : rien à montrer.
+    if (error || !data) return null;
+    return { actif: data.actif, membreId: data.membre_id, le: data.cree_le, version: data.version };
   }
 }

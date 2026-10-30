@@ -25,7 +25,7 @@ export function smsHref(tel: string, corps?: string): string {
 
 /** Texte du SMS qui envoie le lien de suivi au client (prénom facultatif : « Bonjour, »). */
 export function texteSmsSuivi(v: { prenom: string; garage: string; token: string }): string {
-  return `${salutation(v.prenom)}, suivez l’avancement de votre véhicule ici : ${lienSuivi(v.token)} · ${v.garage}`;
+  return `${salutation(v.prenom)}, suivez votre véhicule ou écrivez-nous ici : ${lienSuivi(v.token)} · ${v.garage}`;
 }
 
 /**
