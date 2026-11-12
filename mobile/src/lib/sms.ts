@@ -159,6 +159,15 @@ export function normaliserSms(texte: string): string {
   );
 }
 
+/**
+ * Le texte qui partirait diffère-t-il du message habituel du garage ? Même
+ * comparaison que la fonction `sms` (textes normalisés des deux côtés) : un
+ * texte modifié demande la permission `smsLibre` (0022).
+ */
+export function smsModifie(ecrit: string, habituel: string): boolean {
+  return normaliserSms(ecrit) !== normaliserSms(habituel);
+}
+
 export type MesureSms = {
   codage: 'gsm7' | 'unicode';
   /** Longueur facturée : septets en GSM-7 (extension comptée double), unités UTF-16 en Unicode */

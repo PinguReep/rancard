@@ -62,7 +62,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "verifier:publication": "node scripts/verifier-publication.mjs",
-    "tester": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/envoi-inscription.test.mjs",
+    "tester": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/envoi-inscription.test.mjs scripts/horaire.test.mjs",
     "postinstall": "patch-package"
   },
   "private": true

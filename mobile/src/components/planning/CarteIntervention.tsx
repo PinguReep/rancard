@@ -56,8 +56,8 @@ type Props = {
 
 const AUCUN: Evenement[] = [];
 
-/** Mot court de l’état, et sa couleur. */
-function etat(statut: Statut, t: Palette): { mot: string; couleur: string } {
+/** Mot court de l’état, et sa couleur (aussi celui des cases de la grille horaire). */
+export function etatCarte(statut: Statut, t: Palette): { mot: string; couleur: string } {
   switch (statut) {
     case 'a_valider':
       return { mot: 'À valider', couleur: t.warn };
@@ -99,7 +99,7 @@ export function CarteIntervention({
   const voiture = vehicule ? `${modele} ${vehicule.plaque}` : modele;
   const quand = quandCarte(i, jour ?? maintenant, maintenant, evenements);
   const bloquee = estBloquee(i) && i.blocage ? i.blocage : null;
-  const e = etat(i.statut, t);
+  const e = etatCarte(i.statut, t);
 
   // Ancienneté de l’état : blocage posé, ou passage en Prêt.
   const debutEtat = depuisEtat(i, evenements, maintenant);

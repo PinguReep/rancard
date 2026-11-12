@@ -18,15 +18,15 @@ export const ROLES: Record<Role, { label: string; description: string }> = {
 export const POSTES: Record<Poste, { label: string; permissions: Permissions }> = {
   mecanicien: {
     label: 'Mécanicien',
-    permissions: { voirTout: false, voirPrix: false, creer: false, appels: false, activite: false },
+    permissions: { voirTout: false, voirPrix: false, creer: false, appels: false, activite: false, smsLibre: false },
   },
   receptionnaire: {
     label: 'Réceptionnaire',
-    permissions: { voirTout: true, voirPrix: true, creer: true, appels: true, activite: false },
+    permissions: { voirTout: true, voirPrix: true, creer: true, appels: true, activite: false, smsLibre: false },
   },
   chef_atelier: {
     label: 'Chef d’atelier',
-    permissions: { voirTout: true, voirPrix: true, creer: true, appels: true, activite: true },
+    permissions: { voirTout: true, voirPrix: true, creer: true, appels: true, activite: true, smsLibre: false },
   },
 };
 
@@ -36,6 +36,7 @@ export const PERMISSIONS_LABELS: Record<keyof Permissions, { label: string; aide
   creer: { label: 'Créer des interventions', aide: 'Nouveau client, nouveau rendez-vous.' },
   appels: { label: 'Voir les appels', aide: 'Appels pris par le réceptionniste.' },
   activite: { label: 'Voir l’activité', aide: 'Chiffres de la semaine.' },
+  smsLibre: { label: 'Envoyer des SMS modifiés', aide: 'Texte modifié ou rédigé par l’IA, envoyé par Rencar.' },
 };
 
 export const TOUTES_PERMISSIONS: Permissions = {
@@ -44,6 +45,7 @@ export const TOUTES_PERMISSIONS: Permissions = {
   creer: true,
   appels: true,
   activite: true,
+  smsLibre: true,
 };
 
 /** Permissions effectives : un gérant a tout, quel que soit ce qui est stocké. */
@@ -70,6 +72,20 @@ type Qui = Pick<Membre, 'role' | 'permissions'>;
 export function peutLivrer(m: Qui): boolean {
   return permissionsDe(m).voirPrix;
 }
+
+/**
+ * Envoyer par Rencar un SMS au texte modifié ou rédigé par l’IA : `smsLibre`
+ * (0022), donnée par le gérant dans la fiche du membre, jamais par un poste.
+ * Le message habituel du garage part pour toute l’équipe. Clé absente
+ * (fiche d’avant 0022) : non. Même règle que la fonction `sms`.
+ */
+export function peutEnvoyerSmsModifie(m: Qui): boolean {
+  return permissionsDe(m).smsLibre === true;
+}
+
+/** Refus de la fonction `sms` sans `smsLibre`, mot pour mot (rejoué par la démonstration). */
+export const REFUS_SMS_LIBRE =
+  'Sans la permission « Envoyer des SMS modifiés », donnée par le gérant, seul le message habituel du garage part par Rencar.';
 
 /** « Annuler l’intervention » : `creer` ; ignorer une fiche « À valider » : `appels` suffit. */
 export function peutAnnulerIntervention(m: Qui, depuis: Statut): boolean {

@@ -17,8 +17,14 @@
  *
  * Rédaction par l’IA (option `redactionIa` du garage) : le texte devient
  * un champ, avec « Rédiger avec l’IA » (`RedactionSms`) ; ce qui part est
- * le texte relu du champ. Avec les relances SMS, seulement pour le gérant
- * (un texte modifié lui est réservé par la fonction `sms`).
+ * le texte relu du champ, pour toute l’équipe. Avec les relances SMS, un
+ * texte modifié part par Rencar si le membre a la permission « Envoyer des
+ * SMS modifiés » (`smsLibre`, 0022 : le gérant l’a toujours et la donne dans
+ * la fiche d’un membre ; même règle que la fonction `sms`). Sans elle, le
+ * message habituel part toujours par Rencar ; dès que le texte change,
+ * l’envoi par Rencar se grise avec une phrase neutre et la feuille propose
+ * l’app SMS du téléphone (lien de suivi compris), ou de reprendre le
+ * message habituel.
  *
  * Client sans mobile valide (D6, mobile facultatif) : pas de SMS possible,
  * la feuille le dit et ne propose que le passage en « Véhicule prêt » ;
@@ -32,10 +38,20 @@ import { mobileJoignable } from '@/components/clients/outils';
 import { Bouton, Feuille, GARDE_MS, GARDE_PRET_MS, Icone, Legende, Secondaire, Texte, armerGarde, impulsion } from '@/components/ui';
 import { repo } from '@/data';
 import { fermeA } from '@/domain/echeances';
-import { estGerant } from '@/domain/permissions';
+import { peutEnvoyerSmsModifie } from '@/domain/permissions';
 import { aPrestation, NON_INCLUS } from '@/domain/prestations';
 import type { Client, Intervention, Vehicule } from '@/domain/types';
-import { appelClient, formaterTelephone, gabaritSms, lettresRemplacees, mesureSms, nomClient, normaliserSms, titreVoiture } from '@/lib/format';
+import {
+  appelClient,
+  formaterTelephone,
+  gabaritSms,
+  lettresRemplacees,
+  mesureSms,
+  nomClient,
+  normaliserSms,
+  smsModifie,
+  titreVoiture,
+} from '@/lib/format';
 import { lienSuivi, smsHref } from '@/lib/suivi';
 import { useDonnees, useMembre } from '@/state/session';
 import { useTheme } from '@/theme/tokens';
@@ -46,6 +62,9 @@ export type CibleSms = { intervention: Intervention; client?: Client; vehicule?:
 
 /** Le client peut recevoir le SMS « prêt » : un mobile français valide (06, 07). */
 export const peutRecevoirSms = (client?: Client) => Boolean(client?.telephone && mobileJoignable(client.telephone));
+
+/** Sous l’envoi par Rencar grisé, quand un membre sans `smsLibre` a modifié le texte. */
+export const RESERVE_SMS_MODIFIE = 'Un texte modifié part par Rencar avec la permission du gérant.';
 
 /** Comment le client a été prévenu au passage en Prêt. */
 export type FinSms = 'sms' | 'sans' | 'telephone';
@@ -74,16 +93,19 @@ export function FeuilleSmsPret({ cible, onFermer, onFait, onErreur }: Props) {
   // Ce qui part : ponctuation ramenée au GSM-7 et lettres hors GSM-7 sans
   // accent (« François » → « Francois »), même règle que le serveur.
   const smsPossible = peutRecevoirSms(client);
-  // Rédaction par l’IA (option du garage) : le texte devient un champ à relire et à modifier. Avec
-  // les relances SMS, un texte modifié est réservé au gérant (fonction `sms`) : l’employé garde le
-  // gabarit du garage, et rédige avec l’IA depuis la bulle « Écrire un SMS » de la fiche.
-  const ia = garage.options.redactionIa === true && smsPossible && Boolean(client) && (!relancesSms || estGerant(membre));
+  // Rédaction par l’IA (option du garage) : le texte devient un champ à relire et à modifier, pour
+  // toute l’équipe. Avec les relances SMS, un texte modifié part par Rencar avec `smsLibre` (0022).
+  const ia = garage.options.redactionIa === true && smsPossible && Boolean(client);
   // Texte du champ ; null tant que rien n’a changé (gabarit du garage).
   const [saisie, setSaisie] = useState<string | null>(null);
+  // Remonte le champ quand le message habituel revient (la mention de l’IA repart de zéro).
+  const [reprise, setReprise] = useState(0);
   useEffect(() => {
     setSaisie(null);
   }, [cible]);
   const ecrit = ia ? (saisie ?? texte) : texte;
+  // Texte modifié sans la permission : l’envoi par Rencar se grise, l’app SMS du téléphone prend le relais.
+  const parTelephone = relancesSms && ia && smsModifie(ecrit, texte) && !peutEnvoyerSmsModifie(membre);
   const vide = !ecrit.trim();
   const apercu = normaliserSms(ecrit);
   const { segments } = mesureSms(apercu);
@@ -241,16 +263,24 @@ export function FeuilleSmsPret({ cible, onFermer, onFait, onErreur }: Props) {
           {' ?'}
         </Secondaire>
         {ia ? (
-          // Le gérant relit et modifie ; le décompte dessous suit le texte tel qu’il partira.
+          // Le membre relit et modifie ; le décompte dessous suit le texte tel qu’il partira.
           <View className="mt-3">
-            <RedactionSms key={cible.intervention.id} interventionId={cible.intervention.id} intention="pret" texte={ecrit} onTexte={setSaisie} qui={qui} />
+            <RedactionSms
+              key={`${cible.intervention.id}-${reprise}`}
+              interventionId={cible.intervention.id}
+              intention="pret"
+              texte={ecrit}
+              onTexte={setSaisie}
+              qui={qui}
+              aide={parTelephone && !ecrit.includes(lien) ? 'Le lien de suivi est ajouté à la fin du message.' : undefined}
+            />
           </View>
         ) : (
           <View className="mt-3 rounded-2xl bg-surface2 dark:bg-surface2-dark p-4">
             <Texte>{apercu}</Texte>
           </View>
         )}
-        {fermeA(garage.horaires, new Date()) ? (
+        {!parTelephone && fermeA(garage.horaires, new Date()) ? (
           // Le soir ou un jour fermé : le SMS part tout de suite, sa page dira le prochain jour d’ouverture.
           <Legende ton="warn" className="ml-1 mt-2">
             {`Garage fermé à cette heure : ${qui} recevra le SMS tout de suite.`}
@@ -258,31 +288,76 @@ export function FeuilleSmsPret({ cible, onFermer, onFait, onErreur }: Props) {
         ) : null}
         <View className="mt-3 flex-row gap-2">
           <View className="flex-1">
-            <Bouton
-              onPress={() => valider('sms')}
-              chargement={envoi === 'sms'}
-              desactive={envoi === 'sans' || vide}
-              accessibilityLabel={`Envoyer le SMS à ${qui} et passer en véhicule prêt`}>
-              Envoyer le SMS
-            </Bouton>
+            {parTelephone ? (
+              <Bouton
+                onPress={() => valider('telephone')}
+                chargement={envoi === 'telephone'}
+                desactive={envoi === 'sans' || vide}
+                accessibilityLabel={`Passer en véhicule prêt et écrire à ${qui} depuis l’app SMS du téléphone`}>
+                Écrire depuis mes SMS
+              </Bouton>
+            ) : (
+              <Bouton
+                onPress={() => valider('sms')}
+                chargement={envoi === 'sms'}
+                desactive={envoi === 'sans' || vide}
+                accessibilityLabel={`Envoyer le SMS à ${qui} et passer en véhicule prêt`}>
+                Envoyer le SMS
+              </Bouton>
+            )}
           </View>
           <View className="flex-1">
             <Bouton
               variante="secondaire"
               onPress={() => valider('sans')}
               chargement={envoi === 'sans'}
-              desactive={envoi === 'sms'}
+              desactive={envoi === 'sms' || envoi === 'telephone'}
               accessibilityLabel="Passer en véhicule prêt sans envoyer de SMS">
               Sans SMS
             </Bouton>
           </View>
         </View>
-        <Legende className="ml-1 mt-2">
-          Expéditeur {garage.expediteurSms} · {apercu.length} caractères · {segments > 1 ? `compte pour ${segments} SMS` : '1 SMS'}
-        </Legende>
-        {remplacees.length ? (
-          <Legende className="ml-1 mt-0.5">{`Envoyé sans accent : ${remplacees.map(([de, vers]) => `${de} → ${vers}`).join(', ')}`}</Legende>
+        {parTelephone ? (
+          <>
+            {/* Texte modifié sans la permission : l’envoi par Rencar reste visible, grisé, avec une phrase neutre. */}
+            <View
+              className="mt-4 flex-row items-center gap-3 rounded-2xl border border-line px-4 py-3 opacity-60 dark:border-line-dark"
+              accessible
+              accessibilityLabel={`Envoi du SMS par Rencar. ${RESERVE_SMS_MODIFIE}`}
+              accessibilityState={{ disabled: true }}>
+              <Icone nom="cadenas" taille={16} couleur={t.muted} />
+              <View className="flex-1">
+                <Texte ton="muted">Envoi du SMS par Rencar</Texte>
+                <Legende>{RESERVE_SMS_MODIFIE}</Legende>
+              </View>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reprendre le message habituel du garage, envoyé par Rencar"
+              disabled={envoi !== null}
+              onPress={() => {
+                impulsion('leger');
+                setSaisie(null);
+                setReprise((n) => n + 1);
+              }}
+              className="mt-2 min-h-[44px] items-center justify-center rounded-2xl active:bg-surface2 dark:active:bg-surface2-dark">
+              <Texte ton="accent" className="font-semibold">
+                Reprendre le message habituel
+              </Texte>
+            </Pressable>
+          </>
         ) : null}
+        {/* Décompte et accents : seulement pour ce qui part par Rencar. */}
+        {parTelephone ? null : (
+          <>
+            <Legende className="ml-1 mt-2">
+              Expéditeur {garage.expediteurSms} · {apercu.length} caractères · {segments > 1 ? `compte pour ${segments} SMS` : '1 SMS'}
+            </Legende>
+            {remplacees.length ? (
+              <Legende className="ml-1 mt-0.5">{`Envoyé sans accent : ${remplacees.map(([de, vers]) => `${de} → ${vers}`).join(', ')}`}</Legende>
+            ) : null}
+          </>
+        )}
         {pasMaintenant}
       </View>
     );

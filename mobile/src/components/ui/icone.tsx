@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   Bell,
   Calendar,
+  CalendarClock,
   CalendarPlus,
   Camera,
   Car,
@@ -16,12 +17,14 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Columns3,
   Clock,
   Ellipsis,
   Euro,
   Eye,
   Flag,
   Gauge,
+  List,
   Lock,
   MessageSquare,
   Mic,
@@ -38,6 +41,7 @@ import {
   RotateCw,
   Search,
   Settings,
+  SlidersHorizontal,
   Sparkles,
   TriangleAlert,
   Undo2,
@@ -92,7 +96,11 @@ export type NomIcone =
   | 'colis'
   | 'euro'
   | 'calendrier'
-  | 'redaction';
+  | 'redaction'
+  | 'affichage'
+  | 'vue.liste'
+  | 'vue.journee'
+  | 'vue.equipe';
 
 const SF: Record<NomIcone, string> = {
   planning: 'calendar',
@@ -136,6 +144,10 @@ const SF: Record<NomIcone, string> = {
   euro: 'eurosign',
   calendrier: 'calendar.badge.plus',
   redaction: 'sparkles',
+  affichage: 'slider.horizontal.3',
+  'vue.liste': 'list.bullet',
+  'vue.journee': 'calendar.day.timeline.left',
+  'vue.equipe': 'rectangle.split.3x1',
 };
 
 const LUCIDE: Record<NomIcone, LucideIcon> = {
@@ -180,6 +192,10 @@ const LUCIDE: Record<NomIcone, LucideIcon> = {
   euro: Euro,
   calendrier: CalendarPlus,
   redaction: Sparkles,
+  affichage: SlidersHorizontal,
+  'vue.liste': List,
+  'vue.journee': CalendarClock,
+  'vue.equipe': Columns3,
 };
 
 /** Nom SF Symbol pour les onglets natifs. */

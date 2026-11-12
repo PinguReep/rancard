@@ -114,6 +114,11 @@ export const clientsDemo: Client[] = [
   { id: 'c5', garageId: GARAGE_ID, prenom: 'Sophie', nom: 'Lambert', telephone: '06 39 98 00 16', creeLe: avant(170, 10) },
   { id: 'c6', garageId: GARAGE_ID, prenom: 'Hugo', nom: 'Bertin', telephone: '06 39 98 00 17', creeLe: avant(60, 10) },
   { id: 'c7', garageId: GARAGE_ID, prenom: 'Nicolas', nom: 'Fabre', telephone: '06 39 98 00 18', creeLe: depuis(46) },
+  // Journée chargée (grille horaire du planning) : numéros fictifs, tranche 06 39 98 réservée à la fiction par l’Arcep.
+  { id: 'c8', garageId: GARAGE_ID, prenom: 'Élodie', nom: 'Garnier', telephone: '06 39 98 21 04', creeLe: avant(90, 10) },
+  { id: 'c9', garageId: GARAGE_ID, prenom: 'Samir', nom: 'Haddad', telephone: '06 39 98 47 15', creeLe: avant(30, 10) },
+  { id: 'c10', garageId: GARAGE_ID, prenom: 'Claire', nom: 'Bonnet', telephone: '06 39 98 63 28', creeLe: avant(400, 10) },
+  { id: 'c11', garageId: GARAGE_ID, prenom: 'Hugo', nom: 'Lambert', telephone: '06 39 98 85 39', creeLe: avant(5, 10) },
 ];
 
 export const vehiculesDemo: Vehicule[] = [
@@ -124,6 +129,10 @@ export const vehiculesDemo: Vehicule[] = [
   { id: 'v5', garageId: GARAGE_ID, clientId: 'c5', plaque: 'AA-005-AA', marque: 'Toyota', modele: 'Yaris', version: '1.5 Hybride', annee: 2019, km: 64200, origineDonnees: 'saisie' },
   { id: 'v6', garageId: GARAGE_ID, clientId: 'c6', plaque: 'AA-006-AA', marque: 'Renault', modele: 'Mégane III', version: '1.5 dCi', annee: 2014, km: 151800, origineDonnees: 'saisie' },
   { id: 'v7', garageId: GARAGE_ID, clientId: 'c7', plaque: 'AA-007-AA', marque: 'Dacia', modele: 'Sandero', version: '1.0 SCe', annee: 2020, km: 38600, origineDonnees: 'saisie' },
+  { id: 'v8', garageId: GARAGE_ID, clientId: 'c8', plaque: 'AA-009-AA', marque: 'Toyota', modele: 'Yaris', version: '1.5 Hybride', annee: 2021, km: 38200, origineDonnees: 'saisie' },
+  { id: 'v9', garageId: GARAGE_ID, clientId: 'c9', plaque: 'AA-010-AA', marque: 'Dacia', modele: 'Duster', version: '1.5 dCi 110', annee: 2017, km: 156700, origineDonnees: 'saisie' },
+  { id: 'v10', garageId: GARAGE_ID, clientId: 'c10', plaque: 'AA-011-AA', marque: 'Peugeot', modele: '3008', version: '1.6 BlueHDi 120', annee: 2016, km: 133900, origineDonnees: 'saisie' },
+  { id: 'v11', garageId: GARAGE_ID, clientId: 'c11', plaque: 'AA-012-AA', marque: 'Fiat', modele: '500', version: '1.2 69 ch', annee: 2019, km: 51400, origineDonnees: 'saisie' },
 ];
 
 export const interventionsDemo: Intervention[] = [
@@ -205,6 +214,44 @@ export const interventionsDemo: Intervention[] = [
     membreId: null, prioritaire: false, debut: jour(2, 14), dureeMin: 180, montantEstime: 249,
     suiviToken: 'demo-i11', creeLe: avant(1, 18), majLe: avant(1, 18),
   },
+  // Journée chargée d’aujourd’hui (grille horaire du planning) : on avance un peu sur une voiture, un peu
+  // sur l’autre dans la même heure. Simon : i12 chevauche i1 et i3 ; Elias : i13 chevauche i4 ;
+  // Adrien : i15 tombe pendant i14 ; i16 attend un mécanicien (colonne « À attribuer »).
+  {
+    id: 'i12', garageId: GARAGE_ID, clientId: 'c8', vehiculeId: 'v8',
+    prestation: 'Révision constructeur', statut: 'recu', blocage: null, origine: 'telephone',
+    membreId: 'm-simon', prioritaire: false, debut: jour(0, 9), dureeMin: 90,
+    restitutionPrevue: jour(0, 12), memo: 'Attend sur place, café offert.', montantEstime: 219,
+    suiviToken: 'demo-i12', creeLe: avant(4, 15), majLe: aujourdhuiAuPlusTard(8, 55), kmDepot: 38200,
+  },
+  {
+    id: 'i13', garageId: GARAGE_ID, clientId: 'c9', vehiculeId: 'v9',
+    prestation: 'Pneus avant + géométrie', statut: 'planifie', blocage: null, origine: 'site',
+    membreId: 'm-elias', prioritaire: false, debut: jour(0, 11, 30), dureeMin: 60,
+    restitutionPrevue: jour(0, 14), montantEstime: 236,
+    suiviToken: 'demo-i13', creeLe: avant(2, 18), majLe: avant(2, 18),
+  },
+  {
+    id: 'i14', garageId: GARAGE_ID, clientId: 'c10', vehiculeId: 'v10',
+    prestation: 'Remplacement de l’alternateur', statut: 'planifie', blocage: null, origine: 'comptoir',
+    membreId: 'm-adrien', prioritaire: true, debut: jour(0, 14), dureeMin: 150,
+    restitutionPrevue: jour(0, 18), memo: 'Grince à froid, client pressé.', montantEstime: 345,
+    suiviToken: 'demo-i14', creeLe: avant(3, 11), majLe: avant(3, 11),
+  },
+  {
+    id: 'i15', garageId: GARAGE_ID, clientId: 'c11', vehiculeId: 'v11',
+    prestation: 'Contrôle avant contrôle technique', statut: 'planifie', blocage: null, origine: 'site',
+    membreId: 'm-adrien', prioritaire: false, debut: jour(0, 15), dureeMin: 30,
+    restitutionPrevue: jour(0, 16), montantEstime: 39,
+    suiviToken: 'demo-i15', creeLe: avant(1, 9), majLe: avant(1, 9),
+  },
+  {
+    id: 'i16', garageId: GARAGE_ID, clientId: 'c6', vehiculeId: 'v6',
+    prestation: 'Bruit au freinage', statut: 'planifie', blocage: null, origine: 'site',
+    membreId: null, prioritaire: false, debut: jour(0, 16, 30), dureeMin: 60,
+    demande: 'Couinement à l’arrière en fin de freinage, surtout le matin.', montantEstime: 69,
+    suiviToken: 'demo-i16', creeLe: avant(1, 20), majLe: avant(1, 20),
+  },
 ];
 
 export const commentairesDemo: Commentaire[] = [
@@ -230,6 +277,7 @@ export const evenementsDemo: Evenement[] = [
   { id: 'e7', interventionId: 'i5', membreId: 'm-elias', type: 'sms', valeur: 'Bonjour Sophie, votre véhicule est prêt, vous pouvez venir le récupérer aux horaires d’ouverture. Garage de démonstration', creeLe: jour(0, 10, 35) },
   { id: 'e8', interventionId: 'i6', membreId: 'm-simon', type: 'statut', valeur: 'livre', creeLe: jour(-1, 16, 5) },
   { id: 'e9', interventionId: 'i7', membreId: null, type: 'creation', valeur: 'ia', creeLe: depuis(46) },
+  { id: 'e10', interventionId: 'i12', membreId: 'm-simon', type: 'statut', valeur: 'recu', creeLe: aujourdhuiAuPlusTard(8, 55) },
 ];
 
 export const appelsDemo: Appel[] = [

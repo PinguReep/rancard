@@ -104,6 +104,8 @@ export default function RootLayout() {
               />
               <Stack.Screen name="nouvelle-intervention" options={{ presentation: 'modal', headerShown: false }} />
               <Stack.Screen name="profil" options={{ presentation: 'modal', headerShown: false }} />
+              {/* Éditeur d’une vue du planning (feuille « Affichage ») : réglage gardé sur le téléphone. */}
+              <Stack.Screen name="vue-planning" options={{ presentation: 'modal', headerShown: false }} />
               <Stack.Screen name="ecran-appel" options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }} />
             </Stack.Protected>
             {/* Compte créé dans l’app, pas encore validé par Rencar : rien d’autre que l’attente. */}

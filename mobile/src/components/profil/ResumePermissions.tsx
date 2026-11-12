@@ -19,6 +19,7 @@ const COURT: Record<keyof Permissions, string> = {
   creer: 'création',
   appels: 'appels',
   activite: 'activité',
+  smsLibre: 'SMS modifiés',
 };
 
 /** « Planning complet · montants · création » ou « Ses interventions seulement ». */

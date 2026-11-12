@@ -416,6 +416,21 @@ export function versDemande(l: LigneDemande): DemandeInscription {
   };
 }
 
+/**
+ * Permissions lues en base : une clé absente vaut non (même règle que
+ * `a_permission`), par exemple `smsLibre` sur une ligne d’avant 0022.
+ */
+function permissionsLues(p: Partial<Permissions> | null): Permissions {
+  return {
+    voirTout: p?.voirTout === true,
+    voirPrix: p?.voirPrix === true,
+    creer: p?.creer === true,
+    appels: p?.appels === true,
+    activite: p?.activite === true,
+    smsLibre: p?.smsLibre === true,
+  };
+}
+
 export function versMembre(l: LigneMembre): Membre {
   return {
     id: l.id,
@@ -425,7 +440,7 @@ export function versMembre(l: LigneMembre): Membre {
     email: l.email ?? '',
     role: l.role,
     poste: l.poste,
-    permissions: l.permissions,
+    permissions: permissionsLues(l.permissions),
     couleur: l.couleur,
     actif: l.actif,
     ...(l.invitation_en_attente ? { invitationEnAttente: true } : {}),
@@ -442,7 +457,7 @@ export function versMembreDepuisInvitation(l: LigneInvitation): Membre {
     email: l.email,
     role: l.role,
     poste: l.poste,
-    permissions: l.permissions,
+    permissions: permissionsLues(l.permissions),
     couleur: l.couleur,
     actif: true,
     invitationEnAttente: true,

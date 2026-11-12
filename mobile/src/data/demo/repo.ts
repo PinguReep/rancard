@@ -50,7 +50,7 @@ import {
   type Consequences,
   type ContexteJournal,
 } from '@/domain/journal';
-import { peut, permissionsDe, POSTES, TOUTES_PERMISSIONS } from '@/domain/permissions';
+import { peut, peutEnvoyerSmsModifie, permissionsDe, POSTES, REFUS_SMS_LIBRE, TOUTES_PERMISSIONS } from '@/domain/permissions';
 import { aPrestation } from '@/domain/prestations';
 import type {
   Acces,
@@ -71,16 +71,17 @@ import type {
   Vehicule,
 } from '@/domain/types';
 import { type IntentionSms, VERSION_ACCORD_IA } from '@/lib/redaction';
-import { normaliserSms } from '@/lib/sms';
+import { gabaritSms, normaliserSms, smsModifie } from '@/lib/sms';
 
 import { ecouteDemo } from './ecoutes';
 import { redactionDemo } from './redaction';
 import { DEMO_MEMBRE_ID, snapshotDemo } from './seed';
 
+// v5 : journée chargée d’aujourd’hui (grille horaire du planning, chevauchements) ;
 // v4 : messages des clients écrits sur leur page de suivi (0020) ; v3 :
 // instantané v2c (kilométrage au dépôt, détail des blocages, événements et
 // notes liés). Un instantané plus ancien est remplacé par le seed.
-const CLE = 'atelier.demo.v4';
+const CLE = 'atelier.demo.v5';
 const CLE_SESSION = 'atelier.demo.session.v1';
 /** Demande d'inscription de démonstration (« Créer un compte ») : une seule, sur ce téléphone. */
 const CLE_DEMANDE = 'atelier.demo.demande.v1';
@@ -750,8 +751,15 @@ export class DemoRepo implements Repo {
   }
 
   async envoyerSmsPret(interventionId: string, auteurId: string, texte: string) {
+    // Même refus que la fonction Edge `sms` : un texte modifié demande `smsLibre` (0022).
+    const lu = await this.lire();
+    const i = lu.interventions.find((x) => x.id === interventionId);
+    const client = lu.clients.find((c) => c.id === i?.clientId);
+    const habituel = gabaritSms(lu.garage.texteSmsPret, { prenom: client?.prenom ?? '', garage: lu.garage.nom });
+    const auteur = this.membre(lu, auteurId);
+    if (texte.trim() && smsModifie(texte, habituel) && (!auteur || !peutEnvoyerSmsModifie(auteur))) throw new Error(REFUS_SMS_LIBRE);
     // Journal du texte tel qu’il serait parti (normalisé, comme la fonction Edge `sms`).
-    const envoye = normaliserSms(texte);
+    const envoye = normaliserSms(texte.trim() ? texte : habituel);
     await this.muter((s) => {
       // Après le passage en « Prêt » qu’il annonce, même sous une horloge figée.
       const creeLe = this.instant(s, interventionId).toISOString();

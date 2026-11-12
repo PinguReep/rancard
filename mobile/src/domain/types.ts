@@ -62,6 +62,11 @@ export type Permissions = {
   appels: boolean;
   /** Voit l'onglet Activité */
   activite: boolean;
+  /**
+   * Envoie par Rencar un SMS au texte modifié ou rédigé par l'IA (0022).
+   * Le message habituel du garage part pour toute l'équipe, sans elle.
+   */
+  smsLibre: boolean;
 };
 
 export type Membre = {

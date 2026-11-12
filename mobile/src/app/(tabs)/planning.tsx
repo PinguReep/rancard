@@ -10,6 +10,14 @@
  * « Votre journée » (charge du jour affiché), et une seule garde du double
  * appui pour toute l’app : la liste reste inerte aussi longtemps que la
  * garde armée par `passage-statut` après chaque changement de statut.
+ *
+ * Vues (démonstration « emploi du temps ») : le bouton « Affichage » de
+ * l’en-tête choisit la liste (par défaut), la grille horaire « Journée »,
+ * la grille par mécanicien « Équipe » ou une vue composée par l’utilisateur
+ * (`components/planning/vues.ts`, gardées sur le téléphone). La grille
+ * reprend les mêmes interventions du jour, la même portée et les mêmes
+ * feuilles (actions, attribution, déplacement) que la liste ; elle laisse
+ * le bandeau « À traiter » et « Votre journée » à la liste.
  */
 
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
@@ -28,6 +36,9 @@ import { useAjout } from '@/components/planning/ajout';
 import { BandeauATraiter } from '@/components/planning/BandeauATraiter';
 import { CarteIntervention } from '@/components/planning/CarteIntervention';
 import { FeuilleActions } from '@/components/planning/FeuilleActions';
+import { FeuilleAffichage } from '@/components/planning/FeuilleAffichage';
+import { GrilleHoraire, type ColonneEquipe } from '@/components/planning/GrilleHoraire';
+import { creneauDuJour } from '@/components/planning/horaire';
 import {
   ORDRE_SECTIONS,
   evenementsParIntervention,
@@ -40,6 +51,7 @@ import {
   type FiltreATraiter,
 } from '@/components/planning/logique';
 import { SelecteurJour, joursDeLaBande } from '@/components/planning/SelecteurJour';
+import { VUE_LISTE, toutesLesVues, useVuesPlanning, vuesProposees } from '@/components/planning/vues';
 import { Bouton, BoutonRond, Ecran, Etiquette, FeuilleDate, Icone, Legende, Vide, armerGarde, impulsion, useGardeActive, useMargeBasse } from '@/components/ui';
 import { Segments } from '@/components/ui/segments';
 import { repo } from '@/data';
@@ -90,6 +102,7 @@ export default function Planning() {
   const [attribuerPour, setAttribuerPour] = useState<string | null>(null);
   const [deplacerPour, setDeplacerPour] = useState<string | null>(null);
   const [autreJour, setAutreJour] = useState(false);
+  const [affichage, setAffichage] = useState(false);
   const passage = usePassageStatut();
   const { executer, passer, marquerPrevenu, avis, montrerAvis } = passage;
 
@@ -118,6 +131,15 @@ export default function Planning() {
   }
 
   const tous = p.voirTout && portee === 'tous';
+
+  // Vue affichée : la liste par défaut ; « Équipe » (et toute grille par mécanicien) demande « Voir tout ».
+  const idActive = useVuesPlanning((s) => s.active);
+  const personnelles = useVuesPlanning((s) => s.personnelles);
+  const zooms = useVuesPlanning((s) => s.zooms);
+  const zoomConnu = useVuesPlanning((s) => s.zoomConnu);
+  const vues = vuesProposees(toutesLesVues(personnelles, zooms), p.voirTout);
+  const vue = vues.find((v) => v.id === idActive) ?? vues.find((v) => v.id === VUE_LISTE)!;
+  const enGrille = vue.disposition !== 'liste';
   const maintenant = new Date();
 
   const changerJour = (j: Date) => {
@@ -135,8 +157,8 @@ export default function Planning() {
     const duJourMoi = duJourTous.filter((i) => i.membreId === membre.id);
     const parIntervention = evenementsParIntervention(s.evenements);
     const evenementsDe = (id: string) => parIntervention.get(id) ?? AUCUN;
-    // Bandeau « À traiter » : vue « Tout l’atelier », chaque jour.
-    const comptes = tous ? aTraiter(duJourTous, { maintenant, jour, evenementsDe }) : null;
+    // Bandeau « À traiter » : vue « Tout l’atelier », chaque jour ; la grille le laisse à la liste.
+    const comptes = tous && !enGrille ? aTraiter(duJourTous, { maintenant, jour, evenementsDe }) : null;
     // Une puce retombée à zéro (dernière voiture traitée) ne masque plus rien.
     const filtreActif = comptes && filtre && comptes[filtre].length > 0 ? filtre : null;
     const retenues = comptes && filtreActif ? new Set(comptes[filtreActif]) : null;
@@ -162,6 +184,8 @@ export default function Planning() {
       nouvelles: new Set(duJour.filter((i) => estNouvellePour(i, s.notifications, s.evenements, membre.id)).map((i) => i.id)),
       // « Votre journée » : voitures du jour affiché, immobilisées comprises, sans prêtes ni livrées.
       charge: chargeDuJour(visibles, membre.id, jour),
+      // En-têtes de la grille « Équipe » : même charge que « Votre journée » et la feuille d’attribution.
+      charges: new Map(s.membres.map((m) => [m.id, chargeDuJour(visibles, m.id, jour)])),
       // Les compteurs disent ce qui reste à faire : les livrées ont leur propre section.
       nbMoi: duJourMoi.filter((i) => i.statut !== 'livre').length,
       nbTous: duJourTous.filter((i) => i.statut !== 'livre').length,
@@ -255,29 +279,62 @@ export default function Planning() {
 
   // « Votre journée : 4 voitures · 4 h 45 prévues » (vue « Mes voitures »).
   const journee = texteJournee(d.charge);
-  const ligneJournee = tous ? null : (
-    // Sans segments, la ligne remonte dans la marge de l’en-tête : la 4ᵉ carte de Elias reste en vue.
-    <Legende className={`mx-5 ${p.voirTout ? '-mt-1 mb-3' : '-mt-2 mb-2'}`} accessibilityLabel={`Votre journée : ${journee.replace(' · ', ', ')}`}>
+  const votreJournee = (classe: string) => (
+    <Legende className={classe} numberOfLines={1} accessibilityLabel={`Votre journée : ${journee.replace(' · ', ', ')}`}>
       Votre journée : <Legende ton="ink" className="font-semibold">{journee}</Legende>
     </Legende>
   );
+  const libelleAffichage = `Affichage du planning, vue ${vue.nom}`;
+
+  // Grille « Équipe » : une colonne par membre de l’équipe (« Mes voitures » : la sienne),
+  // plus « À attribuer » quand une voiture du jour attend un mécanicien.
+  const colonnesEquipe: ColonneEquipe[] = [];
+  if (vue.disposition === 'equipe') {
+    const avecCreneau = d.duJour.filter((i) => creneauDuJour(i, jour) !== null);
+    const membres = tous
+      ? d.equipe.filter((m) => m.poste !== 'receptionnaire' || avecCreneau.some((i) => i.membreId === m.id))
+      : d.equipe.filter((m) => m.id === membre.id);
+    for (const m of membres) colonnesEquipe.push({ membre: m, charge: d.charges.get(m.id) });
+    if (tous && avecCreneau.some((i) => !i.membreId)) colonnesEquipe.push({ membre: null });
+  }
 
   const entete = (
     <View className="pb-1">
       <Entete titre="Planning" date={jour} droite={p.creer ? <BoutonRond nom="plus" label="Nouvelle intervention" onPress={nouvelle} accent /> : undefined} />
+      {/* « Affichage » vit sous l’en-tête : un quatrième bouton rond y couperait le titre en deux à 375 pt. */}
       {p.voirTout ? (
-        <Segments<Portee>
-          options={[
-            { id: 'moi', label: 'Mes voitures', compte: d.nbMoi },
-            { id: 'tous', label: 'Tout l’atelier', compte: d.nbTous },
-          ]}
-          valeur={portee}
-          onChange={changerPortee}
-          className="mx-4 mb-4"
-        />
-      ) : null}
-      {/* Sans segments (employé sans « voir tout »), « Votre journée » prend leur place. */}
-      {ligneJournee}
+        <View className={`mx-4 flex-row items-center gap-2 ${enGrille ? 'mb-3' : 'mb-4'}`}>
+          <Segments<Portee>
+            options={[
+              { id: 'moi', label: 'Mes voitures', compte: d.nbMoi },
+              { id: 'tous', label: 'Tout l’atelier', compte: d.nbTous },
+            ]}
+            valeur={portee}
+            onChange={changerPortee}
+            className="flex-1"
+          />
+          <BoutonRond nom="affichage" label={libelleAffichage} onPress={() => setAffichage(true)} />
+        </View>
+      ) : (
+        // Sans segments (employé sans « voir tout »), « Votre journée » prend leur place, remontée dans la marge de
+        // l’en-tête : la 4ᵉ carte de Elias reste en vue. « Affichage » s’y range en petit, sans agrandir la ligne.
+        <View className="mx-5 -mt-2 mb-2 flex-row items-center gap-2">
+          {votreJournee('flex-1')}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={libelleAffichage}
+            hitSlop={10}
+            onPress={() => {
+              impulsion();
+              setAffichage(true);
+            }}
+            className="h-7 w-7 items-center justify-center rounded-full active:opacity-60">
+            <Icone nom="affichage" taille={18} couleur={t.muted} />
+          </Pressable>
+        </View>
+      )}
+      {/* Avec les segments, « Votre journée » suit « Mes voitures » ; la grille garde la place pour les heures. */}
+      {p.voirTout && !tous && !enGrille ? votreJournee('mx-5 -mt-1 mb-3') : null}
       {d.comptes ? <BandeauATraiter comptes={d.comptes} filtre={d.filtreActif} onFiltrer={setFiltre} /> : null}
       <SelecteurJour
         jour={jour}
@@ -372,20 +429,64 @@ export default function Planning() {
   return (
     <Ecran>
       <View className="flex-1" pointerEvents={garde || relais ? 'none' : 'auto'}>
-        <FlashList
-          ref={liste}
-          data={lignes}
-          renderItem={rendre}
-          keyExtractor={(l) => (l.type === 'section' ? `s-${l.cle}` : l.intervention.id)}
-          getItemType={(l) => l.type}
-          ListHeaderComponent={entete}
-          ListEmptyComponent={vide}
-          refreshControl={rafraichir}
-          contentContainerStyle={{ paddingBottom: margeBasse }}
-          extraData={{ d, garde }}
-          showsVerticalScrollIndicator={false}
-        />
+        {enGrille ? (
+          <>
+            {entete}
+            <GrilleHoraire
+              jour={jour}
+              plage={d.horaires?.[jour.getDay()]}
+              interventions={d.duJour}
+              disposition={vue.disposition === 'equipe' ? 'equipe' : 'journee'}
+              colonnes={colonnesEquipe}
+              champs={vue.champs}
+              couleur={vue.couleur}
+              hauteurHeure={vue.hauteurHeure}
+              onZoom={(h) => useVuesPlanning.getState().zoomer(vue.id, h)}
+              astuceZoom={!zoomConnu}
+              clientDe={clientDe}
+              vehiculeDe={vehiculeDe}
+              mecanicienDe={mecanicienDe}
+              onOuvrir={ouvrir}
+              onActions={setActionsPour}
+              rafraichir={rafraichir}
+              margeBasse={margeBasse}
+            />
+          </>
+        ) : (
+          <FlashList
+            ref={liste}
+            data={lignes}
+            renderItem={rendre}
+            keyExtractor={(l) => (l.type === 'section' ? `s-${l.cle}` : l.intervention.id)}
+            getItemType={(l) => l.type}
+            ListHeaderComponent={entete}
+            ListEmptyComponent={vide}
+            refreshControl={rafraichir}
+            contentContainerStyle={{ paddingBottom: margeBasse }}
+            extraData={{ d, garde }}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
       </View>
+
+      <FeuilleAffichage
+        ouverte={affichage}
+        onFermer={() => setAffichage(false)}
+        vues={vues}
+        active={vue.id}
+        onChoisir={(id) => {
+          useVuesPlanning.getState().choisir(id);
+          setAffichage(false);
+        }}
+        onModifier={(id) => {
+          setAffichage(false);
+          setTimeout(() => router.push({ pathname: '/vue-planning', params: { id } }), FERMETURE_FEUILLE_MS);
+        }}
+        onCreer={() => {
+          setAffichage(false);
+          setTimeout(() => router.push('/vue-planning'), FERMETURE_FEUILLE_MS);
+        }}
+      />
 
       <FeuilleActions
         intervention={cibleActions}

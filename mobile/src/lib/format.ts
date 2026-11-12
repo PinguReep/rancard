@@ -226,7 +226,7 @@ export const euros = (n?: number) =>
 
 // SMS (gabarit, texte tel qu’il part, nombre de SMS facturés) : dans
 // `sms.ts`, copie conforme du serveur vérifiée par un test Deno.
-export { gabaritSms, lettresRemplacees, mesureSms, normaliserSms, salutation, type MesureSms } from './sms';
+export { gabaritSms, lettresRemplacees, mesureSms, normaliserSms, salutation, smsModifie, type MesureSms } from './sms';
 
 // ── Noms
 
