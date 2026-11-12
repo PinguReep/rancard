@@ -1,6 +1,7 @@
 export { Avatar, Avatars } from './avatar';
 export { Bouton } from './bouton';
 export { BoutonRond } from './bouton-rond';
+export { Bulle, SORTIE_BULLE_MS } from './bulle';
 export { Carte, Groupe, Ligne, Section, Separateur } from './carte';
 export { Champ } from './champ';
 export { ETAPES, etapeDe, Frise, PisteAvancement } from './avancement';

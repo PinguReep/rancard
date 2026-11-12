@@ -8,6 +8,7 @@ import { Tabs } from 'expo-router';
 import type { ColorValue } from 'react-native';
 
 import { Icone, type NomIcone } from '@/components/ui/icone';
+import { useOrientation } from '@/lib/orientation';
 import { usePermissions } from '@/state/session';
 import { halo, useTheme } from '@/theme/tokens';
 
@@ -19,6 +20,8 @@ const icone = (nom: NomIcone) =>
 export default function AppTabs() {
   const t = useTheme();
   const p = usePermissions();
+  // Planning en grille dans une fenêtre couchée (812 × 375) : la barre se masque, comme sur le téléphone.
+  const paysageGrille = useOrientation((s) => s.paysageGrille);
 
   return (
     <Tabs
@@ -41,6 +44,7 @@ export default function AppTabs() {
           borderTopColor: t.line,
           backgroundColor: t.scheme === 'dark' ? 'rgba(23, 28, 37, 0.88)' : 'rgba(255, 255, 255, 0.92)',
           ...(t.scheme === 'dark' ? halo('#000000', 20, 0.5) : {}),
+          ...(paysageGrille ? { display: 'none' as const } : {}),
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600', lineHeight: 14 },
       }}>

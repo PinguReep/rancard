@@ -3,20 +3,26 @@
  * Appels. Appels est masqué sans la permission (sans le réceptionniste, il
  * reste visible et montre la fonction grisée) ;
  * l'activité du garage s'ouvre depuis le profil.
+ *
+ * Planning en grille, téléphone couché : la barre se masque, la semaine
+ * prend toute la hauteur (lib/orientation.ts).
  */
 
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 import { sfSymbol } from '@/components/ui/icone';
+import { useOrientation } from '@/lib/orientation';
 import { usePermissions } from '@/state/session';
 import { useTheme } from '@/theme/tokens';
 
 export default function AppTabs() {
   const t = useTheme();
   const p = usePermissions();
+  const paysageGrille = useOrientation((s) => s.paysageGrille);
 
   return (
     <NativeTabs
+      hidden={paysageGrille}
       backgroundColor={t.bg}
       indicatorColor={t.surface2}
       labelStyle={{ selected: { color: t.accent } }}

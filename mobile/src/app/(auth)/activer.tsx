@@ -47,7 +47,7 @@ export default function ActiverCompte() {
   }
 
   return (
-    <Ecran>
+    <Ecran fermeClavier>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-center px-6">
         <Titre>Activer mon compte</Titre>
         <Secondaire className="mt-2 mb-8">Le code à 6 chiffres est dans l’e-mail d’invitation.</Secondaire>

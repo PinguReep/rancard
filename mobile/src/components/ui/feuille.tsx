@@ -80,7 +80,13 @@ export function Feuille({ ouverte, onFermer, titre, legende, inerteMs = ENTREE_F
   const suit = useAnimatedStyle(() => ({ transform: [{ translateY: decalage.value }] }));
 
   return (
-    <Modal visible={ouverte} transparent animationType="none" onRequestClose={onFermer} statusBarTranslucent>
+    <Modal
+      visible={ouverte}
+      transparent
+      animationType="none"
+      onRequestClose={onFermer}
+      statusBarTranslucent
+      supportedOrientations={['portrait', 'landscape']}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View className="flex-1 justify-end">
           <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(160)} className="absolute inset-0 bg-black/40">

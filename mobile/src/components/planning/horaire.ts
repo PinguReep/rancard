@@ -1,7 +1,9 @@
 /**
  * Logique pure de la grille horaire du planning (vues « Journée » et
- * « Équipe ») : bornes de l’axe du temps, placement des créneaux qui se
- * chevauchent côte à côte, bornes et ancrage du zoom.
+ * « Équipe ») : bornes de l’axe du temps (un jour ou plusieurs côte à côte),
+ * placement des créneaux qui se chevauchent côte à côte, bornes et ancrage
+ * du zoom sur les deux axes (heures ; jours ou largeur des colonnes),
+ * direction du pincement.
  *
  * Aucune dépendance (ni alias `@/`, ni date-fns, ni React Native) : Node lit
  * ce fichier tel quel (types effacés) pour les tests de
@@ -18,7 +20,7 @@
 export const ZOOM_MIN = 32;
 export const ZOOM_MAX = 180;
 export const ZOOM_DEFAUT = 72;
-/** Facteur des boutons « − » et « + ». */
+/** Facteur d’un pas de l’élément réglable (VoiceOver, TalkBack). */
 export const PAS_ZOOM = 1.25;
 
 /** Hauteur minimale lisible d’une case, en points (une ligne de texte). */
@@ -72,14 +74,37 @@ export function creneauDuJour(i: { id: string; debut: string; dureeMin: number }
   return { id: i.id, debut, fin: Math.max(fin, debut + 1) };
 }
 
+/** Ouverture et fermeture du jour en minutes, ou null (jour fermé, horaires illisibles). */
+export function plageMinutes(plage: Plage): { de: number; a: number } | null {
+  if (!plage) return null;
+  const de = minutesDe(plage.de);
+  const a = minutesDe(plage.a);
+  return Number.isFinite(de) && Number.isFinite(a) && a > de ? { de, a } : null;
+}
+
 /**
  * Axe du temps du jour : de l’ouverture à la fermeture (arrondies à l’heure
  * pleine), 8 h à 18 h un jour fermé, élargi aux créneaux qui débordent.
  */
 export function bornesJour(plage: Plage, creneaux: Creneau[]): { debut: number; fin: number } {
-  let debut = plage ? minutesDe(plage.de) : NaN;
-  let fin = plage ? minutesDe(plage.a) : NaN;
-  if (!Number.isFinite(debut) || !Number.isFinite(fin) || fin <= debut) {
+  return bornesJours([plage], creneaux);
+}
+
+/**
+ * Axe du temps de plusieurs jours côte à côte : l’union de leurs horaires
+ * d’ouverture (le samedi matin ne coupe pas le mardi soir), 8 h à 18 h si
+ * tous sont fermés, élargie aux créneaux qui débordent, arrondie à l’heure.
+ */
+export function bornesJours(plages: Plage[], creneaux: Creneau[]): { debut: number; fin: number } {
+  let debut = Infinity;
+  let fin = -Infinity;
+  for (const p of plages) {
+    const m = plageMinutes(p);
+    if (!m) continue;
+    debut = Math.min(debut, m.de);
+    fin = Math.max(fin, m.a);
+  }
+  if (!Number.isFinite(debut) || !Number.isFinite(fin)) {
     debut = OUVERTURE_DEFAUT;
     fin = FERMETURE_DEFAUT;
   }
@@ -164,6 +189,133 @@ export function defilementApresZoom(defilement: number, focal: number, hAvant: n
   'worklet';
   if (hAvant <= 0) return defilement;
   return Math.max(0, ((defilement + focal) * hApres) / hAvant - focal);
+}
+
+// ── Zoom horizontal
+
+/** « Journée » : jours côte à côte, du jour choisi (portrait) ou de la semaine (paysage). */
+export const JOURS_MIN = 1;
+export const JOURS_MAX = 7;
+export const JOURS_DEFAUT = 1;
+export const JOURS_DEFAUT_PAYSAGE = 7;
+
+export const bornerJours = (n: number) => (Number.isFinite(n) ? Math.min(JOURS_MAX, Math.max(JOURS_MIN, Math.round(n))) : JOURS_DEFAUT);
+
+/**
+ * Nombre entier de jours où se pose le pincement : celui dont la largeur de
+ * colonne est la plus proche de la largeur laissée par les doigts.
+ */
+export function aimanterJours(disponible: number, largeurColonne: number): number {
+  'worklet';
+  if (!(disponible > 0) || !(largeurColonne > 0)) return JOURS_MIN;
+  return Math.min(JOURS_MAX, Math.max(JOURS_MIN, Math.round(disponible / largeurColonne)));
+}
+
+/** « Équipe » : largeur d’une colonne de mécanicien, en points. */
+export const LARGEUR_EQUIPE_MIN = 72;
+export const LARGEUR_EQUIPE_MAX = 260;
+export const LARGEUR_EQUIPE_DEFAUT = 104;
+
+export const bornerLargeurEquipe = (l: number) =>
+  Number.isFinite(l) ? Math.min(LARGEUR_EQUIPE_MAX, Math.max(LARGEUR_EQUIPE_MIN, l)) : LARGEUR_EQUIPE_DEFAUT;
+
+/**
+ * Bornes de la largeur d’une colonne « Équipe » à l’écran : jamais moins que
+ * ce qui fait tenir toutes les colonnes dans la largeur disponible (pas de
+ * vide à droite avec deux mécaniciens), ni moins de 72 pt ; au plus 260 pt,
+ * sauf si une colonne seule est plus large.
+ */
+export function bornesLargeurEquipe(disponible: number, nbColonnes: number): { min: number; max: number } {
+  'worklet';
+  const toutTient = disponible > 0 && nbColonnes > 0 ? disponible / nbColonnes : 0;
+  const min = Math.max(LARGEUR_EQUIPE_MIN, toutTient);
+  return { min, max: Math.max(LARGEUR_EQUIPE_MAX, min) };
+}
+
+/** Largeur affichée d’une colonne « Équipe » : la largeur voulue, dans ses bornes. */
+export function largeurEquipe(voulue: number, disponible: number, nbColonnes: number): number {
+  'worklet';
+  const b = bornesLargeurEquipe(disponible, nbColonnes);
+  return Math.min(b.max, Math.max(b.min, voulue));
+}
+
+// ── Direction du pincement
+
+export type DirectionPincement = 'vertical' | 'horizontal' | 'deux';
+
+/**
+ * Angles de partage, en degrés depuis l’horizontale : au-delà de 60°, les
+ * doigts sont l’un au-dessus de l’autre (les heures seulement) ; en deçà de
+ * 30°, côte à côte (jours ou colonnes seulement) ; entre les deux, en
+ * diagonale (les deux axes à la fois).
+ */
+export const ANGLE_VERTICAL = 60;
+export const ANGLE_HORIZONTAL = 30;
+
+/** Direction décidée au début du pincement, d’après l’écart des deux doigts sur chaque axe. */
+export function directionPincement(ecartX: number, ecartY: number): DirectionPincement {
+  'worklet';
+  const x = Math.abs(ecartX);
+  const y = Math.abs(ecartY);
+  // Doigts confondus (écart inconnu) : le zoom des heures, comme avant.
+  if (x === 0 && y === 0) return 'vertical';
+  const angle = (Math.atan2(y, x) * 180) / Math.PI;
+  if (angle > ANGLE_VERTICAL) return 'vertical';
+  if (angle < ANGLE_HORIZONTAL) return 'horizontal';
+  return 'deux';
+}
+
+/** En deçà de cet écart sur un axe au départ, son rapport serait du bruit : l’échelle du pincement le remplace. */
+export const ECART_MIN_AXE = 24;
+
+/**
+ * Facteur de zoom d’un axe en diagonale : rapport de l’écart des doigts sur
+ * cet axe à son écart de départ. `echelle` (l’échelle du pincement) quand
+ * l’écart de départ est trop petit pour être lu.
+ */
+export function facteurAxe(ecartDepart: number, ecartActuel: number, echelle: number): number {
+  'worklet';
+  const d = Math.abs(ecartDepart);
+  return d >= ECART_MIN_AXE ? Math.abs(ecartActuel) / d : echelle;
+}
+
+// ── Jours affichés
+
+/**
+ * Premier jour affiché en « Journée ». Portrait : le jour choisi. Paysage
+ * (`semaine`) : le lundi de sa semaine, sauf si le jour choisi tomberait
+ * au-delà des `n` jours montrés (vendredi avec trois jours) : il est alors
+ * le dernier.
+ */
+export function premierJourAffiche(jour: Date, n: number, semaine: boolean): Date {
+  const a = jour.getFullYear();
+  const m = jour.getMonth();
+  const j = jour.getDate();
+  if (!semaine) return new Date(a, m, j);
+  const rang = (jour.getDay() + 6) % 7;
+  const nb = bornerJours(n);
+  return rang < nb ? new Date(a, m, j - rang) : new Date(a, m, j - (nb - 1));
+}
+
+/** `n` jours consécutifs à partir de `premier` (minuit local, juste aussi aux changements d’heure). */
+export function joursConsecutifs(premier: Date, n: number): Date[] {
+  const jours: Date[] = [];
+  for (let k = 0; k < n; k += 1) jours.push(new Date(premier.getFullYear(), premier.getMonth(), premier.getDate() + k));
+  return jours;
+}
+
+/**
+ * Heures fermées d’un jour sur l’axe `debut`–`fin` (grisées dans sa
+ * colonne) : avant l’ouverture et après la fermeture ; tout l’axe un jour
+ * fermé.
+ */
+export function zonesFermees(plage: Plage, debut: number, fin: number): { debut: number; fin: number }[] {
+  const p = plageMinutes(plage);
+  if (!p) return [{ debut, fin }];
+  const zones: { debut: number; fin: number }[] = [];
+  if (p.de > debut) zones.push({ debut, fin: Math.min(p.de, fin) });
+  if (p.a < fin) zones.push({ debut: Math.max(p.a, debut), fin });
+  return zones.filter((z) => z.fin > z.debut);
 }
 
 /**

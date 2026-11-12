@@ -95,7 +95,7 @@ export default function ConfirmerAdresse() {
         : `Saisissez le code à 6 chiffres envoyé à ${email}.`;
 
   return (
-    <Ecran>
+    <Ecran fermeClavier>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-center px-6">
         <Titre>Confirmez votre adresse</Titre>
         <Secondaire className="mb-8 mt-2">{explication}</Secondaire>

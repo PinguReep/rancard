@@ -61,7 +61,7 @@ export default function Connexion() {
   }
 
   return (
-    <Ecran>
+    <Ecran fermeClavier>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-center px-6">
         <View className="mb-10">
           <View className="mb-6 h-14 w-14 items-center justify-center rounded-2xl bg-accent dark:bg-accent-fond">

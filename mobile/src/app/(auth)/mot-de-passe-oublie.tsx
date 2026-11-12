@@ -83,7 +83,7 @@ export default function MotDePasseOublie() {
   }
 
   return (
-    <Ecran>
+    <Ecran fermeClavier>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-center px-6">
         <Titre>Mot de passe oublié</Titre>
         <Secondaire className="mt-2 mb-8">

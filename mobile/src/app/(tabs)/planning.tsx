@@ -18,14 +18,25 @@
  * reprend les mêmes interventions du jour, la même portée et les mêmes
  * feuilles (actions, attribution, déplacement) que la liste ; elle laisse
  * le bandeau « À traiter » et « Votre journée » à la liste.
+ *
+ * Grille sur plusieurs jours (« Journée », pincement horizontal) : chaque
+ * jour montre ce que la liste montrerait ce jour-là. Téléphone couché (ou
+ * fenêtre basse et large sur le web) : la grille prend l’écran, une seule
+ * ligne fine au-dessus (période, précédent, suivant, « Aujourd’hui ») ;
+ * « Journée » y montre la semaine du jour choisi. La rotation n’est permise
+ * qu’ici, grille affichée et onglet au premier plan (`lib/orientation.ts`).
+ * La grille n’a pas de « tirer pour actualiser » (il se déclenchait en
+ * remontant les heures) : le temps réel du dépôt la tient à jour.
  */
 
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { isSameDay, startOfDay } from 'date-fns';
+import { addDays, format, isSameDay, startOfDay } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Entete } from '@/components/entete';
 import { Avis } from '@/components/intervention/Avis';
@@ -36,9 +47,17 @@ import { useAjout } from '@/components/planning/ajout';
 import { BandeauATraiter } from '@/components/planning/BandeauATraiter';
 import { CarteIntervention } from '@/components/planning/CarteIntervention';
 import { FeuilleActions } from '@/components/planning/FeuilleActions';
-import { FeuilleAffichage } from '@/components/planning/FeuilleAffichage';
-import { GrilleHoraire, type ColonneEquipe } from '@/components/planning/GrilleHoraire';
-import { creneauDuJour } from '@/components/planning/horaire';
+import { MenuAffichage } from '@/components/planning/MenuAffichage';
+import { GrilleHoraire, type ColonneEquipe, type JourGrille } from '@/components/planning/GrilleHoraire';
+import {
+  JOURS_DEFAUT,
+  JOURS_DEFAUT_PAYSAGE,
+  JOURS_MAX,
+  LARGEUR_EQUIPE_DEFAUT,
+  creneauDuJour,
+  joursConsecutifs,
+  premierJourAffiche,
+} from '@/components/planning/horaire';
 import {
   ORDRE_SECTIONS,
   evenementsParIntervention,
@@ -59,6 +78,7 @@ import { aTraiter, chargeDuJour, estNouvellePour } from '@/domain/echeances';
 import type { CanalPrevenu, Evenement, Intervention } from '@/domain/types';
 import { useControleRafraichir } from '@/hooks/use-rafraichir';
 import { dePrenom, heure, jourHeure, nomClient, voitureEtPlaque } from '@/lib/format';
+import { estPaysage, permettreRotation, signalerPaysageGrille, verrouillerPortrait } from '@/lib/orientation';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
 import { halo, useTheme, type Palette } from '@/theme/tokens';
 
@@ -84,6 +104,23 @@ const COULEUR_SECTION: Record<CleSection, keyof Palette> = {
   livrees: 'faint',
 };
 
+/** Période de la ligne du paysage : « lun. 9 nov. », « 9 – 15 nov. », « 30 nov. – 6 déc. ». */
+function libellePeriode(debut: Date, fin: Date): string {
+  if (isSameDay(debut, fin)) return format(debut, 'EEE d MMM', { locale: fr });
+  if (debut.getMonth() === fin.getMonth()) return `${format(debut, 'd')} – ${format(fin, 'd MMM', { locale: fr })}`;
+  return `${format(debut, 'd MMM', { locale: fr })} – ${format(fin, 'd MMM', { locale: fr })}`;
+}
+
+/** Paysage : toute la largeur (pas la largeur maximale d’`Ecran`), hors encoche et coins arrondis. */
+function CadrePaysage({ children }: { children: ReactNode }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View className="flex-1 bg-bg dark:bg-bg-dark" style={{ paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }}>
+      {children}
+    </View>
+  );
+}
+
 export default function Planning() {
   const router = useRouter();
   const rafraichir = useControleRafraichir();
@@ -103,6 +140,8 @@ export default function Planning() {
   const [deplacerPour, setDeplacerPour] = useState<string | null>(null);
   const [autreJour, setAutreJour] = useState(false);
   const [affichage, setAffichage] = useState(false);
+  // La bulle « Affichage » s’ouvre depuis son bouton : cette vue l’entoure et se mesure.
+  const ancreAffichage = useRef<View>(null);
   const passage = usePassageStatut();
   const { executer, passer, marquerPrevenu, avis, montrerAvis } = passage;
 
@@ -140,7 +179,21 @@ export default function Planning() {
   const vues = vuesProposees(toutesLesVues(personnelles, zooms), p.voirTout);
   const vue = vues.find((v) => v.id === idActive) ?? vues.find((v) => v.id === VUE_LISTE)!;
   const enGrille = vue.disposition !== 'liste';
+  const enJournee = vue.disposition === 'journee';
   const maintenant = new Date();
+
+  // Téléphone couché (ou fenêtre web de 812 × 375) : la grille prend l’écran. Une fenêtre d’ordinateur n’est pas concernée.
+  const fenetre = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const paysage = enGrille && estPaysage(fenetre.width, fenetre.height);
+  // Zoom horizontal mémorisé par vue : jours côte à côte (à part en paysage), largeur des colonnes « Équipe ».
+  const joursParVue = useVuesPlanning((s) => (paysage ? s.joursPaysage : s.jours));
+  const largeurs = useVuesPlanning((s) => s.largeurs);
+  const nbJours = enJournee ? (joursParVue[vue.id] ?? (paysage ? JOURS_DEFAUT_PAYSAGE : JOURS_DEFAUT)) : 1;
+  // Portrait : à partir du jour choisi ; paysage : sa semaine, du lundi.
+  const premierJour = enJournee ? premierJourAffiche(jour, nbJours, paysage) : jour;
+  // Le pincement peut faire entrer jusqu’à sept jours : ils sont prêts.
+  const joursGrille = !enGrille ? [] : enJournee ? joursConsecutifs(premierJour, JOURS_MAX) : [jour];
 
   const changerJour = (j: Date) => {
     setFiltre(null);
@@ -190,6 +243,17 @@ export default function Planning() {
       nbMoi: duJourMoi.filter((i) => i.statut !== 'livre').length,
       nbTous: duJourTous.filter((i) => i.statut !== 'livre').length,
       joursAvecRdv: joursDeLaBande().filter((j) => mesRdv.some((i) => isSameDay(new Date(i.debut), j))),
+      // Grille : chaque jour montre ce que la liste montrerait ce jour-là (même règle, même portée, mêmes permissions).
+      grille: joursGrille.map(
+        (j): JourGrille => ({
+          date: j,
+          plage: s.garage.horaires?.[j.getDay()],
+          interventions: visibles
+            .filter((i) => visibleCeJour(i, j, s.evenements, maintenant) && (tous || i.membreId === membre.id))
+            .map((i) => ({ ...i }))
+            .sort(trier),
+        }),
+      ),
     };
   });
 
@@ -208,6 +272,26 @@ export default function Planning() {
     }, []),
   );
 
+  // Rotation permise seulement ici, grille affichée, onglet au premier plan ; en partant, le téléphone se redresse.
+  useFocusEffect(
+    useCallback(() => {
+      if (!enGrille) return undefined;
+      permettreRotation();
+      return () => {
+        verrouillerPortrait();
+      };
+    }, [enGrille]),
+  );
+  // Grille couchée : les onglets se masquent (components/app-tabs*.tsx).
+  useFocusEffect(
+    useCallback(() => {
+      signalerPaysageGrille(paysage);
+      return () => {
+        signalerPaysageGrille(false);
+      };
+    }, [paysage]),
+  );
+
   const clientDe = (i: Intervention) => d.clients.find((c) => c.id === i.clientId);
   const vehiculeDe = (i: Intervention) => d.vehicules.find((v) => v.id === i.vehiculeId);
   const mecanicienDe = (i: Intervention) => (i.membreId ? (d.membres.find((m) => m.id === i.membreId) ?? null) : null);
@@ -222,8 +306,10 @@ export default function Planning() {
     if (ouverte) for (const intervention of items) lignes.push({ type: 'carte', cle, intervention });
   }
 
-  const cibleActions = d.duJour.find((i) => i.id === actionsPour) ?? null;
-  const cibleAttribution = d.duJour.find((i) => i.id === attribuerPour) ?? null;
+  // Grille sur plusieurs jours : la voiture touchée peut venir d’un autre jour que le jour choisi.
+  const enVue = enGrille ? d.grille.flatMap((j) => j.interventions) : d.duJour;
+  const cibleActions = enVue.find((i) => i.id === actionsPour) ?? null;
+  const cibleAttribution = enVue.find((i) => i.id === attribuerPour) ?? null;
   // La feuille Déplacer garde sa dernière cible le temps de se fermer.
   const cibleDeplacement = d.tousLesJours.find((i) => i.id === deplacerPour) ?? null;
   const derniereDeplacee = useRef<Intervention | null>(null);
@@ -313,7 +399,9 @@ export default function Planning() {
             onChange={changerPortee}
             className="flex-1"
           />
-          <BoutonRond nom="affichage" label={libelleAffichage} onPress={() => setAffichage(true)} />
+          <View ref={ancreAffichage} collapsable={false}>
+            <BoutonRond nom="affichage" label={libelleAffichage} onPress={() => setAffichage(true)} />
+          </View>
         </View>
       ) : (
         // Sans segments (employé sans « voir tout »), « Votre journée » prend leur place, remontée dans la marge de
@@ -321,6 +409,7 @@ export default function Planning() {
         <View className="mx-5 -mt-2 mb-2 flex-row items-center gap-2">
           {votreJournee('flex-1')}
           <Pressable
+            ref={ancreAffichage}
             accessibilityRole="button"
             accessibilityLabel={libelleAffichage}
             hitSlop={10}
@@ -344,6 +433,52 @@ export default function Planning() {
       />
     </View>
   );
+
+  // Paysage : une seule ligne fine, la grille prend le reste. « Journée » avance d’une semaine, « Équipe » d’un jour.
+  const pas = enJournee ? 7 : 1;
+  const periode = libellePeriode(premierJour, addDays(premierJour, nbJours - 1));
+  const lignePaysage = (
+    <View className="flex-row items-center border-b border-line dark:border-line-dark" style={{ height: 44 }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={enJournee ? 'Semaine précédente' : 'Jour précédent'}
+        onPress={() => {
+          impulsion('leger');
+          changerJour(addDays(jour, -pas));
+        }}
+        className="h-11 w-11 items-center justify-center active:opacity-60">
+        <Icone nom="chevron.gauche" taille={18} couleur={t.muted} />
+      </Pressable>
+      <Text accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={1.3} className="min-w-[112px] text-center text-[15px] font-semibold text-ink dark:text-ink-dark">
+        {periode}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={enJournee ? 'Semaine suivante' : 'Jour suivant'}
+        onPress={() => {
+          impulsion('leger');
+          changerJour(addDays(jour, pas));
+        }}
+        className="h-11 w-11 items-center justify-center active:opacity-60">
+        <Icone nom="chevron.droite" taille={18} couleur={t.muted} />
+      </Pressable>
+      <View className="flex-1" />
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          impulsion('leger');
+          changerJour(new Date());
+        }}
+        className="min-h-[44px] justify-center px-4 active:opacity-60">
+        <Legende ton="accent" className="font-semibold">
+          Aujourd’hui
+        </Legende>
+      </Pressable>
+    </View>
+  );
+  // Onglets masqués en paysage : la grille descend jusqu’à la zone sûre.
+  const margeGrille = paysage ? insets.bottom + 8 : margeBasse;
+  const Cadre = paysage ? CadrePaysage : Ecran;
 
   const vide = (
     <Vide
@@ -427,15 +562,19 @@ export default function Planning() {
   }
 
   return (
-    <Ecran>
+    <Cadre>
       <View className="flex-1" pointerEvents={garde || relais ? 'none' : 'auto'}>
         {enGrille ? (
           <>
-            {entete}
+            {paysage ? lignePaysage : entete}
             <GrilleHoraire
-              jour={jour}
-              plage={d.horaires?.[jour.getDay()]}
-              interventions={d.duJour}
+              jours={d.grille}
+              nbJours={nbJours}
+              onNbJours={(n) => useVuesPlanning.getState().choisirJours(vue.id, n, paysage)}
+              largeurEquipe={largeurs[vue.id] ?? LARGEUR_EQUIPE_DEFAUT}
+              onLargeurEquipe={(l) => useVuesPlanning.getState().elargir(vue.id, l)}
+              jourChoisi={jour}
+              onChoisirJour={changerJour}
               disposition={vue.disposition === 'equipe' ? 'equipe' : 'journee'}
               colonnes={colonnesEquipe}
               champs={vue.champs}
@@ -448,8 +587,7 @@ export default function Planning() {
               mecanicienDe={mecanicienDe}
               onOuvrir={ouvrir}
               onActions={setActionsPour}
-              rafraichir={rafraichir}
-              margeBasse={margeBasse}
+              margeBasse={margeGrille}
             />
           </>
         ) : (
@@ -469,9 +607,10 @@ export default function Planning() {
         )}
       </View>
 
-      <FeuilleAffichage
+      <MenuAffichage
         ouverte={affichage}
         onFermer={() => setAffichage(false)}
+        ancre={ancreAffichage}
         vues={vues}
         active={vue.id}
         onChoisir={(id) => {
@@ -576,6 +715,6 @@ export default function Planning() {
       />
       <FeuillesPassage passage={passage} />
       <Avis texte={avis} flottant loinDuDoigt />
-    </Ecran>
+    </Cadre>
   );
 }

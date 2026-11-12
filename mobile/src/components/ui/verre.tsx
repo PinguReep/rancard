@@ -18,6 +18,9 @@ try {
   liquide = false;
 }
 
+/** Liquid Glass disponible (iOS 26) : le verre ne veut alors ni voile ni fondu par un parent. */
+export const VERRE_LIQUIDE = liquide;
+
 type Props = { children: ReactNode; style?: StyleProp<ViewStyle>; className?: string };
 
 export function Verre({ children, style, className = '' }: Props) {

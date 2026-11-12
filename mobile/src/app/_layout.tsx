@@ -14,11 +14,14 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { GestionnaireAppels } from '@/components/sonnerie/GestionnaireAppels';
 import { noterAppui } from '@/components/ui/dernier-appui';
+import { verrouillerPortrait } from '@/lib/orientation';
 import { SONNERIE_INCLUSE } from '@/lib/sonnerie/inclusion';
 import { useSession } from '@/state/session';
 import { palette } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+// Portrait partout ; seul le planning en grille permet la rotation (lib/orientation.ts). Rien sur le web.
+verrouillerPortrait();
 
 /**
  * Racine : thème, gestes, clavier, garde d'authentification.

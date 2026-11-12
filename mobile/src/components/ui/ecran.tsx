@@ -40,12 +40,20 @@ type Props = ViewProps & {
   sansHaut?: boolean;
   onRafraichir?: () => Promise<void> | void;
   rafraichissement?: boolean;
+  /**
+   * Toucher hors d’un champ ferme le clavier. À réserver aux écrans de saisie
+   * sans liste (connexion) : ce capteur prend les gestes qui commencent dans
+   * le vide, et une liste placée dessous ne défile alors plus que depuis ses
+   * boutons. Les écrans à liste ferment déjà le clavier par eux-mêmes
+   * (`keyboardShouldPersistTaps`, `keyboardDismissMode`).
+   */
+  fermeClavier?: boolean;
   className?: string;
 };
 
 export const LARGEUR_MAX = 720;
 
-export function Ecran({ children, defilant, sansHaut, onRafraichir, rafraichissement, className = '', ...p }: Props) {
+export function Ecran({ children, defilant, sansHaut, onRafraichir, rafraichissement, fermeClavier, className = '', ...p }: Props) {
   const insets = useSafeAreaInsets();
   const t = useTheme();
   const paddingTop = sansHaut ? 0 : insets.top;
@@ -78,9 +86,8 @@ export function Ecran({ children, defilant, sansHaut, onRafraichir, rafraichisse
   return (
     <View {...p} className={`flex-1 bg-bg dark:bg-bg-dark ${className}`} style={{ paddingTop }}>
       <Halo />
-      {/* Toucher hors d'un champ ferme le clavier (les boutons et les listes gardent leurs gestes).
-          Pas sur le web : le clic qui donne le focus à un champ remonterait jusqu'ici et le lui retirerait. */}
-      {Platform.OS === 'web' ? (
+      {/* Pas sur le web : le clic qui donne le focus à un champ remonterait jusqu’ici et le lui retirerait. */}
+      {Platform.OS === 'web' || !fermeClavier ? (
         <View className="flex-1 w-full self-center" style={{ maxWidth: LARGEUR_MAX }}>
           {children}
         </View>

@@ -7,13 +7,16 @@
  *
  * Gardées sur le téléphone seulement (AsyncStorage, même schéma que
  * `theme/apparence.ts`) : ni le serveur ni les autres membres n’en savent
- * rien. La vue active et le zoom de chaque vue sont mémorisés.
+ * rien. La vue active et le zoom de chaque vue sont mémorisés : hauteur
+ * d’une heure, nombre de jours côte à côte en « Journée » (à part en
+ * portrait et en paysage) et largeur d’une colonne en « Équipe ». Une valeur
+ * absente (téléphone qui l’avait enregistré avant) prend sa valeur par défaut.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
-import { ZOOM_DEFAUT, bornerZoom } from './horaire';
+import { ZOOM_DEFAUT, bornerJours, bornerLargeurEquipe, bornerZoom } from './horaire';
 
 export type Disposition = 'liste' | 'journee' | 'equipe';
 export type CouleurCase = 'etat' | 'mecanicien';
@@ -110,6 +113,12 @@ type Stocke = {
   active: string;
   personnelles: VuePlanning[];
   zooms: Record<string, number>;
+  /** « Journée » : jours côte à côte, par vue (portrait) */
+  jours: Record<string, number>;
+  /** « Journée » : jours côte à côte, par vue (paysage) */
+  joursPaysage: Record<string, number>;
+  /** « Équipe » : largeur voulue d’une colonne, par vue, en points */
+  largeurs: Record<string, number>;
   /** A déjà zoomé une grille : l’astuce du geste ne se montre plus */
   zoomConnu: boolean;
 };
@@ -120,6 +129,10 @@ type Etat = Stocke & {
   enregistrer: (v: VuePlanning) => void;
   supprimer: (id: string) => void;
   zoomer: (id: string, hauteurHeure: number) => void;
+  /** Nombre de jours côte à côte (« Journée »), en portrait ou en paysage */
+  choisirJours: (id: string, n: number, paysage: boolean) => void;
+  /** Largeur d’une colonne (« Équipe ») */
+  elargir: (id: string, largeur: number) => void;
 };
 
 let minuterie: ReturnType<typeof setTimeout> | null = null;
@@ -134,6 +147,9 @@ function sauver(s: Stocke) {
         active: s.active,
         personnelles: s.personnelles,
         zooms: s.zooms,
+        jours: s.jours,
+        joursPaysage: s.joursPaysage,
+        largeurs: s.largeurs,
         zoomConnu: s.zoomConnu,
       }),
     ).catch(() => {});
@@ -166,6 +182,9 @@ export const useVuesPlanning = create<Etat>((set, get) => ({
   active: VUE_LISTE,
   personnelles: [],
   zooms: {},
+  jours: {},
+  joursPaysage: {},
+  largeurs: {},
   zoomConnu: false,
   choisir(id) {
     set({ active: id });
@@ -182,12 +201,15 @@ export const useVuesPlanning = create<Etat>((set, get) => ({
     sauver(get());
   },
   supprimer(id) {
-    const { personnelles, active, zooms } = get();
-    const { [id]: _oublie, ...reste } = zooms;
+    const { personnelles, active, zooms, jours, joursPaysage, largeurs } = get();
+    const sans = (t: Record<string, number>) => Object.fromEntries(Object.entries(t).filter(([cle]) => cle !== id));
     set({
       personnelles: personnelles.filter((x) => x.id !== id),
       active: active === id ? VUE_LISTE : active,
-      zooms: reste,
+      zooms: sans(zooms),
+      jours: sans(jours),
+      joursPaysage: sans(joursPaysage),
+      largeurs: sans(largeurs),
     });
     sauver(get());
   },
@@ -195,7 +217,24 @@ export const useVuesPlanning = create<Etat>((set, get) => ({
     set({ zooms: { ...get().zooms, [id]: bornerZoom(hauteurHeure) }, zoomConnu: true });
     sauver(get());
   },
+  choisirJours(id, n, paysage) {
+    if (paysage) set({ joursPaysage: { ...get().joursPaysage, [id]: bornerJours(n) }, zoomConnu: true });
+    else set({ jours: { ...get().jours, [id]: bornerJours(n) }, zoomConnu: true });
+    sauver(get());
+  },
+  elargir(id, largeur) {
+    set({ largeurs: { ...get().largeurs, [id]: bornerLargeurEquipe(largeur) }, zoomConnu: true });
+    sauver(get());
+  },
 }));
+
+/** Table relue du téléphone : seuls les nombres sont gardés, bornés. */
+function nombres(brut: unknown, borner: (n: number) => number): Record<string, number> {
+  const table: Record<string, number> = {};
+  if (!brut || typeof brut !== 'object') return table;
+  for (const [id, v] of Object.entries(brut as Record<string, unknown>)) if (typeof v === 'number' && Number.isFinite(v)) table[id] = borner(v);
+  return table;
+}
 
 /** Identifiant neuf d’une vue personnelle. */
 export const nouvelId = () => `vue-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -205,12 +244,14 @@ AsyncStorage.getItem(CLE)
     if (!brut) return;
     const s = JSON.parse(brut) as Partial<Stocke>;
     const personnelles = (Array.isArray(s.personnelles) ? s.personnelles : []).map(nettoyer).filter((v): v is VuePlanning => v !== null);
-    const zooms: Record<string, number> = {};
-    for (const [id, h] of Object.entries(s.zooms ?? {})) if (typeof h === 'number') zooms[id] = bornerZoom(h);
+    const zooms = nombres(s.zooms, bornerZoom);
     const ids = new Set([...VUES_PREFAITES, ...personnelles].map((v) => v.id));
     useVuesPlanning.setState({
       personnelles,
       zooms,
+      jours: nombres(s.jours, bornerJours),
+      joursPaysage: nombres(s.joursPaysage, bornerJours),
+      largeurs: nombres(s.largeurs, bornerLargeurEquipe),
       zoomConnu: s.zoomConnu === true,
       active: typeof s.active === 'string' && ids.has(s.active) ? s.active : VUE_LISTE,
     });
