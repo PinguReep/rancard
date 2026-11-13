@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { Modal, Pressable, View } from 'react-native';
+import { Modal, Pressable, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -46,6 +46,7 @@ export const ENTREE_FEUILLE_MS = 530;
 
 export function Feuille({ ouverte, onFermer, titre, legende, inerteMs = ENTREE_FEUILLE_MS, cleInertie, children }: Props) {
   const insets = useSafeAreaInsets();
+  const fenetre = useWindowDimensions();
   const decalage = useSharedValue(0);
 
   useEffect(() => {
@@ -89,14 +90,18 @@ export function Feuille({ ouverte, onFermer, titre, legende, inerteMs = ENTREE_F
       supportedOrientations={['portrait', 'landscape']}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View className="flex-1 justify-end">
-          <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(160)} className="absolute inset-0 bg-black/40">
-            <Pressable accessibilityRole="button" accessibilityLabel="Fermer" className="flex-1" onPress={onFermer} pointerEvents={appuis} />
-          </Animated.View>
-          <Animated.View
-            entering={SlideInDown.duration(280)}
-            exiting={SlideOutDown.duration(220)}
-            className="rounded-t-3xl bg-surface dark:bg-surface-dark px-4"
-            style={[{ paddingBottom: insets.bottom + 16, maxHeight: '85%' }, suit]}>
+          {/* Les vues animées ne portent que leur animation : fond, coins, marges et hauteur maximale sont sur des
+              vues ordinaires. Sur iPhone, une `className` ou un style fixe posés sur une vue animée à côté de son
+              style animé n’étaient pas appliqués (feuille sans fond ni marge basse, vu le 13 novembre 2026). */}
+          <View className="absolute inset-0">
+            <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(160)} style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)' }}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fermer" className="flex-1" onPress={onFermer} pointerEvents={appuis} />
+            </Animated.View>
+          </View>
+          <Animated.View entering={SlideInDown.duration(280)} exiting={SlideOutDown.duration(220)} style={suit}>
+            <View
+              className="rounded-t-3xl bg-surface px-4 dark:bg-surface-dark"
+              style={{ paddingBottom: insets.bottom + 16, maxHeight: fenetre.height * 0.85 }}>
             <GestureDetector gesture={glisser}>
               <View accessible={false} className="pt-3">
                 <View className="mb-3 h-1 w-9 self-center rounded-full bg-line dark:bg-line-dark" />
@@ -106,7 +111,8 @@ export function Feuille({ ouverte, onFermer, titre, legende, inerteMs = ENTREE_F
             </GestureDetector>
             {/* flexShrink : les listes de la feuille gardent leur défilement sous la hauteur maximale. */}
             <View pointerEvents={appuis} style={{ flexShrink: 1 }} className={pret ? '' : 'opacity-60'}>
-              {children}
+                {children}
+              </View>
             </View>
           </Animated.View>
         </View>

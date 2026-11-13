@@ -20,7 +20,7 @@ import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CaseIntervention } from '@/components/planning/CaseIntervention';
-import { HAUTEUR_MIN_CASE, ZOOM_DEFAUT } from '@/components/planning/horaire';
+import { HAUTEUR_MIN_CASE, H_MAX } from '@/components/planning/horaire';
 import {
   CHAMPS,
   CHAMPS_MAX,
@@ -35,8 +35,8 @@ import { Bouton, BoutonRond, Champ, Ecran, Etiquette, FeuilleConfirmation, LARGE
 import { Segments } from '@/components/ui/segments';
 import { useDonnees, useMembre, usePermissions } from '@/state/session';
 
-/** Hauteur de l’aperçu : toutes les lignes choisies, comme une case d’une heure et demie au zoom par défaut. */
-const HAUTEUR_APERCU = Math.max(HAUTEUR_MIN_CASE, Math.round(ZOOM_DEFAUT * 1.5) - 2);
+/** Hauteur de l’aperçu : toutes les lignes choisies, comme une case d’une heure au zoom le plus grand (« Journée », un jour). */
+const HAUTEUR_APERCU = Math.max(HAUTEUR_MIN_CASE, H_MAX - 2);
 
 export default function EditeurVue() {
   const router = useRouter();
@@ -87,7 +87,6 @@ export default function EditeurVue() {
       disposition,
       champs,
       couleur,
-      hauteurHeure: existante?.hauteurHeure ?? ZOOM_DEFAUT,
       prefaite: false,
     }),
     [idVue, existante, nom, nomPropose, disposition, champs, couleur],

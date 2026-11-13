@@ -11,32 +11,29 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-  JOURS_MAX,
-  LARGEUR_EQUIPE_DEFAUT,
-  LARGEUR_EQUIPE_MAX,
-  LARGEUR_EQUIPE_MIN,
-  ZOOM_MAX,
-  ZOOM_MIN,
-  aimanterJours,
-  bornerJours,
-  bornerLargeurEquipe,
-  bornerZoom,
+  H_MAX,
+  H_MIN,
+  ancrer,
+  bornerNiveau,
   bornesJour,
   bornesJours,
-  bornesLargeurEquipe,
+  bornesLargeur,
   creneauDuJour,
-  defilementApresZoom,
-  directionPincement,
-  facteurAxe,
+  hauteurDuNiveau,
   joursConsecutifs,
-  largeurEquipe,
+  largeurDuNiveau,
   lignesQuiTiennent,
+  lundiDe,
   minutesDansJour,
+  niveauApresEchelle,
+  niveauDeLargeur,
+  niveauParDefaut,
   placer,
-  premierJourAffiche,
   repartirLignes,
   zonesFermees,
 } from '../src/components/planning/horaire.ts';
+
+const proche = (a, b, ecart = 1e-9) => assert.ok(Math.abs(a - b) <= ecart, `${a} ≉ ${b}`);
 
 const c = (id, debut, fin) => ({ id, debut, fin });
 const parId = (places) => Object.fromEntries(places.map((p) => [p.id, p]));
@@ -107,12 +104,93 @@ test('créneau du jour : même jour civil seulement, borné à minuit', () => {
   assert.equal(long.fin, 1440);
 });
 
-test('zoom : bornes et point fixe gardé', () => {
-  assert.equal(bornerZoom(5), ZOOM_MIN);
-  assert.equal(bornerZoom(999), ZOOM_MAX);
-  // Point fixe à 200 pt dans la vue, défilement 100 : contenu 300 ; zoom ×2 → 600, défilement 400.
-  assert.equal(defilementApresZoom(100, 200, 60, 120), 400);
-  assert.equal(defilementApresZoom(0, 10, 120, 60), 0);
+test('niveau : borné entre 0 et 1, valeurs par défaut', () => {
+  assert.equal(bornerNiveau(-0.2), 0);
+  assert.equal(bornerNiveau(1.7), 1);
+  assert.equal(bornerNiveau(0.3), 0.3);
+  assert.equal(bornerNiveau(Number.NaN), 0);
+  assert.equal(niveauParDefaut('journee', false), 1);
+  assert.equal(niveauParDefaut('journee', true), 0);
+  assert.equal(niveauParDefaut('equipe', false), 0.4);
+  assert.equal(niveauParDefaut('equipe', true), 0);
+});
+
+test('bornes de largeur : un jour remplit l’écran, la semaine tient ; « Équipe » jamais sous 64 pt', () => {
+  assert.deepEqual(bornesLargeur(329, 7), { min: 47, max: 329 });
+  // Trois mécaniciens : toutes les colonnes tiennent au minimum.
+  assert.deepEqual(bornesLargeur(330, 3, 64), { min: 110, max: 330 });
+  // Huit colonnes : 64 pt au moins, on défile.
+  assert.deepEqual(bornesLargeur(330, 8, 64), { min: 64, max: 330 });
+  // Une colonne seule : pas de plage ; écran minuscule : jamais plus large que l’écran.
+  assert.deepEqual(bornesLargeur(330, 1, 64), { min: 330, max: 330 });
+  assert.deepEqual(bornesLargeur(50, 3, 64), { min: 50, max: 50 });
+  assert.deepEqual(bornesLargeur(0, 7), { min: 0, max: 0 });
+});
+
+test('largeur et hauteur suivent le même niveau', () => {
+  const min = 47;
+  const max = 329;
+  assert.equal(largeurDuNiveau(0, min, max), min);
+  proche(largeurDuNiveau(1, min, max), max);
+  // À mi-course : moyenne géométrique.
+  proche(largeurDuNiveau(0.5, min, max), Math.sqrt(min * max));
+  assert.equal(largeurDuNiveau(2, min, max), largeurDuNiveau(1, min, max));
+  // Sans plage : la largeur disponible, quel que soit le niveau.
+  assert.equal(largeurDuNiveau(0.3, 330, 330), 330);
+  assert.equal(largeurDuNiveau(0.3, 0, 0), 0);
+  assert.equal(hauteurDuNiveau(0), H_MIN);
+  proche(hauteurDuNiveau(1), H_MAX);
+  proche(hauteurDuNiveau(0.5), Math.sqrt(H_MIN * H_MAX));
+  assert.equal(hauteurDuNiveau(-1), H_MIN);
+});
+
+test('niveau déduit de la largeur : aller-retour exact, borné, null sans plage', () => {
+  const min = 47;
+  const max = 329;
+  for (const t of [0, 0.25, 0.4, 0.5, 0.9, 1]) proche(niveauDeLargeur(largeurDuNiveau(t, min, max), min, max), t);
+  assert.equal(niveauDeLargeur(10, min, max), 0);
+  assert.equal(niveauDeLargeur(1000, min, max), 1);
+  assert.equal(niveauDeLargeur(330, 330, 330), null);
+  assert.equal(niveauDeLargeur(100, 0, 0), null);
+});
+
+test('pincement : la largeur suit l’échelle, bornée, le niveau s’en déduit', () => {
+  const min = 47;
+  const max = 329;
+  // Un jour plein écran (niveau 1) pincé de moitié : la largeur est divisée par deux.
+  const t = niveauApresEchelle(1, 0.5, min, max);
+  proche(largeurDuNiveau(t, min, max), max / 2, 1e-6);
+  // Au-delà des bornes : la semaine entière, un jour plein écran.
+  assert.equal(niveauApresEchelle(0.5, 0.01, min, max), 0);
+  assert.equal(niveauApresEchelle(0.5, 100, min, max), 1);
+  // Échelle 1 : rien ne bouge ; échelle illisible : niveau de départ.
+  proche(niveauApresEchelle(0.4, 1, min, max), 0.4);
+  assert.equal(niveauApresEchelle(0.4, 0, min, max), 0.4);
+  // Une colonne seule (pas de plage de largeur) : l’échelle règle les heures seules.
+  const seul = niveauApresEchelle(0, 2, 330, 330);
+  proche(hauteurDuNiveau(seul), 2 * H_MIN, 1e-6);
+});
+
+test('ancrage : le point sous les doigts reste sous les doigts, sur les deux axes', () => {
+  // Horizontal : doigts à 200 pt, défilement 100 → point 300 du contenu ; largeur ×2 → 600, défilement 400.
+  assert.equal(ancrer(100, 200, 200, 60, 120), 400);
+  // Zoom arrière près du bord : jamais de défilement négatif.
+  assert.equal(ancrer(0, 10, 10, 120, 60), 0);
+  // Les doigts glissent de 30 pt vers la gauche : le contenu suit, 30 pt plus loin.
+  assert.equal(ancrer(100, 200, 170, 60, 120), 430);
+  // Borné au défilement maximal du contenu.
+  assert.equal(ancrer(100, 200, 200, 60, 120, 0, 350), 350);
+  assert.equal(ancrer(100, 200, 200, 60, 120, 0, -5), 0);
+  // Vertical avec la marge fixe de 10 pt en tête : l’heure sous les doigts ne bouge pas.
+  const h1 = 36;
+  const h2 = 96;
+  const y1 = 50;
+  const doigt = 180;
+  const minutes = ((y1 + doigt - 10) / h1) * 60;
+  const y2 = ancrer(y1, doigt, doigt, h1, h2, 10);
+  proche(10 + (minutes / 60) * h2 - y2, doigt);
+  // Même échelle : seul le glissement des doigts compte.
+  assert.equal(ancrer(80, 100, 140, 50, 50, 10), 40);
 });
 
 test('lignes qui tiennent et répartition des champs', () => {
@@ -122,57 +200,6 @@ test('lignes qui tiennent et répartition des champs', () => {
   assert.deepEqual(repartirLignes(['A', 'B', 'C'], 2), ['A', 'B · C']);
   assert.deepEqual(repartirLignes(['A', '', 'C'], 3), ['A', 'C']);
   assert.deepEqual(repartirLignes(['A', 'B'], 1), ['A · B']);
-});
-
-test('direction du pincement : l’angle des deux doigts décide', () => {
-  // L’un au-dessus de l’autre : les heures.
-  assert.equal(directionPincement(10, 200), 'vertical');
-  assert.equal(directionPincement(-40, -120), 'vertical');
-  // Côte à côte : les jours (ou les colonnes).
-  assert.equal(directionPincement(200, 20), 'horizontal');
-  // En diagonale : les deux axes.
-  assert.equal(directionPincement(100, 100), 'deux');
-  assert.equal(directionPincement(100, 160), 'deux');
-  // Limites : 60° et 30° restent en diagonale.
-  assert.equal(directionPincement(100, 100 * Math.tan((60 * Math.PI) / 180) - 0.01), 'deux');
-  assert.equal(directionPincement(100, 100 * Math.tan((61 * Math.PI) / 180)), 'vertical');
-  assert.equal(directionPincement(100, 100 * Math.tan((29 * Math.PI) / 180)), 'horizontal');
-  // Écart inconnu : le zoom des heures, comme avant.
-  assert.equal(directionPincement(0, 0), 'vertical');
-});
-
-test('facteur d’un axe en diagonale : rapport des écarts, échelle du pincement sous 24 pt', () => {
-  assert.equal(facteurAxe(100, 150, 9), 1.5);
-  assert.equal(facteurAxe(-100, 50, 9), 0.5);
-  assert.equal(facteurAxe(10, 40, 1.2), 1.2);
-});
-
-test('aimantation du nombre de jours : entier le plus proche, de 1 à 7', () => {
-  assert.equal(aimanterJours(330, 330), 1);
-  assert.equal(aimanterJours(330, 120), 3); // 2,75 jours
-  assert.equal(aimanterJours(330, 140), 2); // 2,36 jours
-  assert.equal(aimanterJours(330, 20), JOURS_MAX);
-  assert.equal(aimanterJours(330, 900), 1);
-  assert.equal(aimanterJours(0, 100), 1);
-  assert.equal(bornerJours(0), 1);
-  assert.equal(bornerJours(12), 7);
-  assert.equal(bornerJours(3.4), 3);
-  assert.equal(bornerJours(Number.NaN), 1);
-});
-
-test('largeur d’une colonne « Équipe » : bornes, et tout tient dans l’écran au minimum', () => {
-  assert.equal(bornerLargeurEquipe(10), LARGEUR_EQUIPE_MIN);
-  assert.equal(bornerLargeurEquipe(999), LARGEUR_EQUIPE_MAX);
-  assert.equal(bornerLargeurEquipe(Number.NaN), LARGEUR_EQUIPE_DEFAUT);
-  // Six colonnes sur 330 pt : 72 pt au moins, on défile.
-  assert.deepEqual(bornesLargeurEquipe(330, 6), { min: 72, max: 260 });
-  // Trois colonnes : jamais moins que le tiers de l’écran (pas de vide à droite).
-  assert.deepEqual(bornesLargeurEquipe(330, 3), { min: 110, max: 260 });
-  // Une seule colonne plus large que 260 pt : toute la largeur.
-  assert.deepEqual(bornesLargeurEquipe(330, 1), { min: 330, max: 330 });
-  assert.equal(largeurEquipe(104, 330, 3), 110);
-  assert.equal(largeurEquipe(104, 330, 6), 104);
-  assert.equal(largeurEquipe(400, 330, 6), 260);
 });
 
 test('axe des heures sur plusieurs jours : union des ouvertures, jours fermés ignorés', () => {
@@ -195,17 +222,13 @@ test('heures fermées d’un jour sur l’axe commun', () => {
   assert.deepEqual(zonesFermees(null, 480, 1140), [{ debut: 480, fin: 1140 }]);
 });
 
-test('premier jour affiché : le jour choisi en portrait, le lundi de sa semaine en paysage', () => {
-  const jeudi = new Date(2026, 10, 12, 15, 30);
-  assert.equal(premierJourAffiche(jeudi, 3, false).getTime(), new Date(2026, 10, 12).getTime());
-  assert.equal(premierJourAffiche(jeudi, 7, true).getTime(), new Date(2026, 10, 9).getTime());
-  assert.equal(premierJourAffiche(jeudi, 5, true).getTime(), new Date(2026, 10, 9).getTime());
-  // Trois jours en paysage, jeudi choisi : mardi, mercredi, jeudi.
-  assert.equal(premierJourAffiche(jeudi, 3, true).getTime(), new Date(2026, 10, 10).getTime());
+test('lundi de la semaine : première colonne de « Journée »', () => {
+  assert.equal(lundiDe(new Date(2026, 10, 12, 15, 30)).getTime(), new Date(2026, 10, 9).getTime());
+  assert.equal(lundiDe(new Date(2026, 10, 9)).getTime(), new Date(2026, 10, 9).getTime());
   // Dimanche : lundi précédent.
-  assert.equal(premierJourAffiche(new Date(2026, 10, 15), 7, true).getTime(), new Date(2026, 10, 9).getTime());
+  assert.equal(lundiDe(new Date(2026, 10, 15)).getTime(), new Date(2026, 10, 9).getTime());
   // Semaine à cheval sur deux mois.
-  assert.equal(premierJourAffiche(new Date(2026, 11, 2), 7, true).getTime(), new Date(2026, 10, 30).getTime());
+  assert.equal(lundiDe(new Date(2026, 11, 2)).getTime(), new Date(2026, 10, 30).getTime());
 });
 
 test('jours consécutifs : minuit local, passage d’heure compris', () => {

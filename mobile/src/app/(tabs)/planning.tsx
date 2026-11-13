@@ -19,8 +19,10 @@
  * feuilles (actions, attribution, déplacement) que la liste ; elle laisse
  * le bandeau « À traiter » et « Votre journée » à la liste.
  *
- * Grille sur plusieurs jours (« Journée », pincement horizontal) : chaque
- * jour montre ce que la liste montrerait ce jour-là. Téléphone couché (ou
+ * Grille « Journée » : les sept jours de la semaine du jour choisi, un
+ * seul zoom lié (largeur des jours et hauteur des heures, un niveau par vue
+ * et par orientation) ; chaque jour montre ce que la liste montrerait ce
+ * jour-là. Téléphone couché (ou
  * fenêtre basse et large sur le web) : la grille prend l’écran, une seule
  * ligne fine au-dessus (période, précédent, suivant, « Aujourd’hui ») ;
  * « Journée » y montre la semaine du jour choisi. La rotation n’est permise
@@ -32,7 +34,7 @@
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { addDays, format, isSameDay, startOfDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -49,15 +51,7 @@ import { CarteIntervention } from '@/components/planning/CarteIntervention';
 import { FeuilleActions } from '@/components/planning/FeuilleActions';
 import { MenuAffichage } from '@/components/planning/MenuAffichage';
 import { GrilleHoraire, type ColonneEquipe, type JourGrille } from '@/components/planning/GrilleHoraire';
-import {
-  JOURS_DEFAUT,
-  JOURS_DEFAUT_PAYSAGE,
-  JOURS_MAX,
-  LARGEUR_EQUIPE_DEFAUT,
-  creneauDuJour,
-  joursConsecutifs,
-  premierJourAffiche,
-} from '@/components/planning/horaire';
+import { COLONNES_JOURNEE, creneauDuJour, joursConsecutifs, lundiDe, niveauParDefaut } from '@/components/planning/horaire';
 import {
   ORDRE_SECTIONS,
   evenementsParIntervention,
@@ -73,7 +67,7 @@ import { SelecteurJour, joursDeLaBande } from '@/components/planning/SelecteurJo
 import { VUE_LISTE, toutesLesVues, useVuesPlanning, vuesProposees } from '@/components/planning/vues';
 import { Bouton, BoutonRond, Ecran, Etiquette, FeuilleDate, Icone, Legende, Vide, armerGarde, impulsion, useGardeActive, useMargeBasse } from '@/components/ui';
 import { Segments } from '@/components/ui/segments';
-import { repo } from '@/data';
+import { BACKEND_BUILD, repo } from '@/data';
 import { aTraiter, chargeDuJour, estNouvellePour } from '@/domain/echeances';
 import type { CanalPrevenu, Evenement, Intervention } from '@/domain/types';
 import { useControleRafraichir } from '@/hooks/use-rafraichir';
@@ -174,9 +168,8 @@ export default function Planning() {
   // Vue affichée : la liste par défaut ; « Équipe » (et toute grille par mécanicien) demande « Voir tout ».
   const idActive = useVuesPlanning((s) => s.active);
   const personnelles = useVuesPlanning((s) => s.personnelles);
-  const zooms = useVuesPlanning((s) => s.zooms);
   const zoomConnu = useVuesPlanning((s) => s.zoomConnu);
-  const vues = vuesProposees(toutesLesVues(personnelles, zooms), p.voirTout);
+  const vues = vuesProposees(toutesLesVues(personnelles), p.voirTout);
   const vue = vues.find((v) => v.id === idActive) ?? vues.find((v) => v.id === VUE_LISTE)!;
   const enGrille = vue.disposition !== 'liste';
   const enJournee = vue.disposition === 'journee';
@@ -186,14 +179,30 @@ export default function Planning() {
   const fenetre = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const paysage = enGrille && estPaysage(fenetre.width, fenetre.height);
-  // Zoom horizontal mémorisé par vue : jours côte à côte (à part en paysage), largeur des colonnes « Équipe ».
-  const joursParVue = useVuesPlanning((s) => (paysage ? s.joursPaysage : s.jours));
-  const largeurs = useVuesPlanning((s) => s.largeurs);
-  const nbJours = enJournee ? (joursParVue[vue.id] ?? (paysage ? JOURS_DEFAUT_PAYSAGE : JOURS_DEFAUT)) : 1;
-  // Portrait : à partir du jour choisi ; paysage : sa semaine, du lundi.
-  const premierJour = enJournee ? premierJourAffiche(jour, nbJours, paysage) : jour;
-  // Le pincement peut faire entrer jusqu’à sept jours : ils sont prêts.
-  const joursGrille = !enGrille ? [] : enJournee ? joursConsecutifs(premierJour, JOURS_MAX) : [jour];
+  // Niveau de zoom mémorisé par vue, à part en portrait et en paysage.
+  const niveaux = useVuesPlanning((s) => (paysage ? s.niveauxPaysage : s.niveaux));
+  const niveau = niveaux[vue.id] ?? niveauParDefaut(vue.disposition === 'equipe' ? 'equipe' : 'journee', paysage);
+  // « Journée » : toujours la semaine du jour choisi, du lundi au dimanche.
+  const premierJour = enJournee ? lundiDe(jour) : jour;
+  const joursGrille = !enGrille ? [] : enJournee ? joursConsecutifs(premierJour, COLONNES_JOURNEE) : [jour];
+
+  // Paramètres d’essai (tests automatiques, démo seulement) : `?vue=journee&zoom=0`, appliqués à chaque nouveau lien (et à la rotation), vues relues.
+  const essai = useLocalSearchParams<{ vue?: string; zoom?: string }>();
+  const vuesChargees = useVuesPlanning((s) => s.charge);
+  const essaiApplique = useRef<string | null>(null);
+  useEffect(() => {
+    if (BACKEND_BUILD !== 'demo' || !vuesChargees) return;
+    if (essai.vue === undefined && essai.zoom === undefined) return;
+    const couche = estPaysage(fenetre.width, fenetre.height);
+    const cle = `${essai.vue}|${essai.zoom}|${couche}`;
+    if (essaiApplique.current === cle) return;
+    essaiApplique.current = cle;
+    const s = useVuesPlanning.getState();
+    if (essai.vue === 'liste' || essai.vue === 'journee' || essai.vue === 'equipe') s.choisir(essai.vue);
+    const zoom = Number(essai.zoom);
+    const id = useVuesPlanning.getState().active;
+    if (essai.zoom !== undefined && Number.isFinite(zoom) && id !== VUE_LISTE) s.regler(id, zoom, couche);
+  }, [vuesChargees, essai.vue, essai.zoom, fenetre.width, fenetre.height]);
 
   const changerJour = (j: Date) => {
     setFiltre(null);
@@ -436,7 +445,7 @@ export default function Planning() {
 
   // Paysage : une seule ligne fine, la grille prend le reste. « Journée » avance d’une semaine, « Équipe » d’un jour.
   const pas = enJournee ? 7 : 1;
-  const periode = libellePeriode(premierJour, addDays(premierJour, nbJours - 1));
+  const periode = libellePeriode(premierJour, addDays(premierJour, joursGrille.length - 1));
   const lignePaysage = (
     <View className="flex-row items-center border-b border-line dark:border-line-dark" style={{ height: 44 }}>
       <Pressable
@@ -569,18 +578,14 @@ export default function Planning() {
             {paysage ? lignePaysage : entete}
             <GrilleHoraire
               jours={d.grille}
-              nbJours={nbJours}
-              onNbJours={(n) => useVuesPlanning.getState().choisirJours(vue.id, n, paysage)}
-              largeurEquipe={largeurs[vue.id] ?? LARGEUR_EQUIPE_DEFAUT}
-              onLargeurEquipe={(l) => useVuesPlanning.getState().elargir(vue.id, l)}
               jourChoisi={jour}
               onChoisirJour={changerJour}
               disposition={vue.disposition === 'equipe' ? 'equipe' : 'journee'}
               colonnes={colonnesEquipe}
               champs={vue.champs}
               couleur={vue.couleur}
-              hauteurHeure={vue.hauteurHeure}
-              onZoom={(h) => useVuesPlanning.getState().zoomer(vue.id, h)}
+              niveau={niveau}
+              onNiveau={(t) => useVuesPlanning.getState().regler(vue.id, t, paysage)}
               astuceZoom={!zoomConnu}
               clientDe={clientDe}
               vehiculeDe={vehiculeDe}
@@ -588,6 +593,7 @@ export default function Planning() {
               onOuvrir={ouvrir}
               onActions={setActionsPour}
               margeBasse={margeGrille}
+              sansHorsCreneau={paysage}
             />
           </>
         ) : (

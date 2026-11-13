@@ -1,0 +1,77 @@
+# Grille horaire : zoom lié (réglé par le lien d’essai, actif en démonstration
+# seulement), heure fixe à gauche, jour fixe en haut, paysage, bulle.
+# Se joue après 01-planning.yaml (la session de démonstration est gardée).
+appId: ${APP_ID}
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Planning"
+    timeout: 60000
+
+- openLink: "rencar:///planning?vue=journee&zoom=1"
+- tapOn:
+    text: "Open|Ouvrir"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 10-journee-un-jour
+
+- openLink: "rencar:///planning?vue=journee&zoom=0.5"
+- tapOn:
+    text: "Open|Ouvrir"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 11-journee-zoom-moyen
+
+# Défilement horizontal : l’en-tête des jours suit, les heures restent à gauche.
+- swipe:
+    start: 85%, 70%
+    end: 25%, 70%
+- waitForAnimationToEnd
+- takeScreenshot: 12-journee-defilee-en-largeur
+
+# Défilement vertical : l’en-tête des jours reste en haut.
+- swipe:
+    start: 60%, 80%
+    end: 60%, 50%
+- waitForAnimationToEnd
+- takeScreenshot: 13-journee-defilee-en-hauteur
+
+- openLink: "rencar:///planning?vue=journee&zoom=0"
+- tapOn:
+    text: "Open|Ouvrir"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 14-semaine
+
+- openLink: "rencar:///planning?vue=equipe&zoom=0.4"
+- tapOn:
+    text: "Open|Ouvrir"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 15-equipe
+
+- openLink: "rencar:///planning?vue=equipe&zoom=1"
+- tapOn:
+    text: "Open|Ouvrir"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 16-equipe-une-colonne
+
+# Bulle « Affichage » ouverte au-dessus d’une grille.
+- tapOn: "Affichage du planning.*"
+- waitForAnimationToEnd
+- takeScreenshot: 17-bulle-sur-grille
+- tapOn: 'Journée\..*'
+- waitForAnimationToEnd
+
+# Téléphone couché : la semaine, une seule ligne, onglets masqués.
+- openLink: "rencar:///planning?vue=journee&zoom=0"
+- tapOn:
+    text: "Open|Ouvrir"
+    optional: true
+- setOrientation: LANDSCAPE_LEFT
+- waitForAnimationToEnd
+- takeScreenshot: 18-paysage-semaine
+- setOrientation: PORTRAIT
+- waitForAnimationToEnd
+- takeScreenshot: 19-retour-portrait

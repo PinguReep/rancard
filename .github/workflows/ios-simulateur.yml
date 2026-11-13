@@ -1,0 +1,140 @@
+# Essais de l'interface sur un simulateur iPhone (Mac GitHub, gratuit sur un
+# dépôt public). Compile l'app en démonstration (aucun secret, aucune
+# signature), la lance dans le simulateur, joue les parcours Maestro de
+# mobile/.maestro/ et publie les captures d'écran sur la branche « captures »
+# (remplacée à chaque exécution, jamais fusionnée).
+#
+# Déclenchement : un push sur la branche « simulateur », ou à la main.
+# Aucun secret n'est lu : seul le jeton du dépôt sert à pousser les captures.
+# Les données montrées sont celles du garage de démonstration (fictives).
+
+name: iOS · essais sur simulateur
+
+on:
+  push:
+    branches: [simulateur]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-simulateur
+  cancel-in-progress: true
+
+jobs:
+  essais:
+    name: Parcours sur simulateur
+    runs-on: macos-26
+    timeout-minutes: 80
+    permissions:
+      contents: write # pousse la branche « captures »
+    env:
+      EXPO_PUBLIC_BACKEND: demo
+      MAESTRO_CLI_NO_ANALYTICS: "1"
+      SORTIE: ${{ github.workspace }}/captures
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Xcode 26.6
+        run: |
+          test -d /Applications/Xcode_26.6.app || { echo "::error::Xcode 26.6 absent de l'image macos-26"; exit 1; }
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+          mkdir -p "$SORTIE"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.16.0
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Dépendances
+        run: npm ci --prefix mobile --no-audit --no-fund
+
+      - name: Projet iOS (prebuild)
+        working-directory: mobile
+        run: |
+          if ! npx expo prebuild --platform ios --clean > "$SORTIE/prebuild.log" 2>&1; then
+            echo "::error::Échec du prebuild : $(tail -n 5 "$SORTIE/prebuild.log" | tr '\n' ' ')"
+            exit 1
+          fi
+
+      - name: Compilation pour le simulateur
+        working-directory: mobile/ios
+        run: |
+          WS=$(ls -d *.xcworkspace | head -1)
+          SCHEME="${WS%.xcworkspace}"
+          if ! xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release \
+               -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+               -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO \
+               > "$SORTIE/xcodebuild.log" 2>&1; then
+            echo "::error::Échec de la compilation : $(grep -E 'error:' "$SORTIE/xcodebuild.log" | head -n 3 | tr '\n' ' ')"
+            exit 1
+          fi
+          APP=$(find build/Build/Products/Release-iphonesimulator -maxdepth 1 -name '*.app' | head -1)
+          test -n "$APP" || { echo "::error::Aucune app produite"; exit 1; }
+          echo "APP=$PWD/$APP" >> "$GITHUB_ENV"
+          echo "APP_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist")" >> "$GITHUB_ENV"
+
+      - name: Simulateur
+        run: |
+          xcrun simctl list devices available > "$SORTIE/simulateurs.txt"
+          UDID=$(xcrun simctl list devices available -j \
+            | jq -r '[.devices[][] | select(.name | test("^iPhone 1[67] Pro$"))][0].udid // empty')
+          if [ -z "$UDID" ]; then
+            UDID=$(xcrun simctl list devices available -j | jq -r '[.devices[][] | select(.name | test("^iPhone"))][0].udid // empty')
+          fi
+          test -n "$UDID" || { echo "::error::Aucun simulateur iPhone disponible"; exit 1; }
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash > "$SORTIE/maestro-installation.log" 2>&1
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Parcours
+        working-directory: captures
+        run: |
+          maestro --version
+          touch "$RUNNER_TEMP/debut-parcours"
+          code=0
+          for f in "$GITHUB_WORKSPACE"/mobile/.maestro/*.yaml; do
+            nom=$(basename "$f" .yaml)
+            if ! maestro --device "$UDID" test "$f" --env APP_ID="$APP_ID" > "$SORTIE/parcours-$nom.log" 2>&1; then
+              code=1
+              echo "::error::Parcours $nom en échec : $(tail -n 6 "$SORTIE/parcours-$nom.log" | tr '\n' ' ')"
+              xcrun simctl io "$UDID" screenshot "$SORTIE/echec-$nom.png" || true
+            fi
+          done
+          # Selon sa version, Maestro range les captures dans le dossier courant, près du parcours
+          # ou dans son dossier de sortie : on ramasse toute image née pendant les parcours.
+          find "$HOME/.maestro" "$GITHUB_WORKSPACE" -name '*.png' -newer "$RUNNER_TEMP/debut-parcours" \
+               -not -path '*/node_modules/*' -not -path '*/mobile/ios/*' -not -path "$SORTIE/*" 2>/dev/null \
+            | while read -r f; do cp "$f" "$SORTIE/$(basename "$f")"; done
+          ls "$SORTIE" > "$SORTIE/fichiers.txt"
+          exit $code
+
+      - name: Publier les captures
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          cd "$SORTIE"
+          # Fins de journaux seulement : assez pour comprendre un échec.
+          for l in *.log; do
+            [ -f "$l" ] || continue
+            tail -n 120 "$l" > "${l%.log}.txt"
+            rm "$l"
+          done
+          echo "${GITHUB_SHA} · exécution ${GITHUB_RUN_ID}" > LISEZMOI.txt
+          git init -q -b captures
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Captures du simulateur (${GITHUB_SHA::7})"
+          git push -q --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" captures

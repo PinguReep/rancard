@@ -17,17 +17,26 @@ import { Dimensions, Platform } from 'react-native';
 /** Au-delà, l’appui n’est plus celui du geste qui produit l’avis. */
 const APPUI_RECENT_MS = 4000;
 
-let dernier: { y: number; t: number } | null = null;
+let dernier: { x: number; y: number; t: number } | null = null;
 
 const instant = () => (typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now());
 
-/** Note un appui à la hauteur `y` (coordonnée de la fenêtre). */
-export function noterAppui(y: number): void {
-  if (Number.isFinite(y)) dernier = { y, t: instant() };
+/** Note un appui en (`x`, `y`), coordonnées de la fenêtre. */
+export function noterAppui(y: number, x = 0): void {
+  if (Number.isFinite(y)) dernier = { x: Number.isFinite(x) ? x : 0, y, t: instant() };
+}
+
+/**
+ * Point du dernier appui s’il date de moins de `recentMs` : la bulle s’ouvre
+ * depuis le bouton qu’on vient de toucher, même si la mesure du bouton échoue.
+ */
+export function positionDernierAppui(recentMs = 1500): { x: number; y: number } | null {
+  if (!dernier || instant() - dernier.t > recentMs) return null;
+  return { x: dernier.x, y: dernier.y };
 }
 
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
-  document.addEventListener('pointerdown', (e) => noterAppui(e.clientY), { capture: true, passive: true });
+  document.addEventListener('pointerdown', (e) => noterAppui(e.clientY, e.clientX), { capture: true, passive: true });
 }
 
 /** Côté où poser un avis à bouton : en haut, sauf si le dernier appui récent était dans le haut de l’écran. */

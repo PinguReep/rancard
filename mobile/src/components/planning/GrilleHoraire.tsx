@@ -2,52 +2,48 @@
  * Grille horaire du planning (vues « Journée » et « Équipe ») : l’emploi
  * du temps de l’atelier, façon agenda. Le temps descend, les heures à
  * gauche, de l’ouverture à la fermeture du garage ; chaque intervention est
- * une case placée et dimensionnée selon son créneau. Deux voitures dans la
- * même heure (on avance un peu sur l’une, un peu sur l’autre) se partagent
- * la largeur, côte à côte (`horaire.ts`).
+ * une case placée et dimensionnée selon son créneau. Une case seule prend
+ * toute la largeur de sa colonne ; deux voitures dans la même heure se la
+ * partagent, côte à côte (`horaire.ts`).
  *
- * « Journée » : de 1 à 7 jours côte à côte à partir du premier jour affiché
- * (le jour choisi en portrait, sa semaine en paysage : `planning.tsx`). Avec
- * plusieurs jours, un en-tête compact par colonne (« lun. 9 », aujourd’hui
- * en couleur d’accent) ; le toucher choisit ce jour. L’axe des heures
- * couvre l’union des horaires des jours montrés ; les heures où un jour est
+ * « Journée » : toujours sept colonnes, la semaine du lundi au dimanche du
+ * jour choisi, dans un défilement horizontal aimanté sur les colonnes ; la
+ * grille défile jusqu’au jour choisi quand il change. L’axe des heures
+ * couvre l’union des horaires de la semaine ; les heures où un jour est
  * fermé sont grisées dans sa colonne (toute la colonne, avec « Fermé », un
  * jour de fermeture). Le trait « maintenant » ne traverse que la colonne
  * d’aujourd’hui.
  *
  * « Équipe » : une colonne par mécanicien (et « À attribuer » si besoin),
- * un seul jour. L’en-tête de colonne tient sur une ligne (avatar, prénom,
- * nombre de voitures s’il reste la place, durée prévue si la colonne est
- * large) et suit le défilement horizontal quand les colonnes ne tiennent pas.
+ * un seul jour.
  *
- * Ce que les jours montrés montrent sans créneau (voiture immobilisée depuis
- * un autre jour, demande à valider, rendez-vous manqué) passe en puces dans
- * la bande « Hors créneau », une fois chacune : rien de ce que montre la
- * liste ne disparaît.
+ * Toujours visibles, quel que soit le zoom ou le défilement : la gouttière
+ * des heures à gauche (hors du défilement horizontal) et la ligne d’en-tête
+ * en haut (hors du défilement vertical) : les jours (« lun. 9 », aujourd’hui
+ * en couleur d’accent ; le toucher choisit ce jour) ou les mécaniciens.
+ * L’en-tête suit le défilement horizontal et la largeur des colonnes par les
+ * mêmes valeurs partagées que les colonnes : aucun décalage.
  *
- * Zoom sur deux axes, sans aucun bouton : la place va aux cases.
- * - Pincement (iOS, Android). La direction se décide au début, d’après la
- *   position des deux doigts (`directionPincement`) : l’un au-dessus de
- *   l’autre, les heures (l’heure sous les doigts reste sous les doigts) ;
- *   côte à côte, le nombre de jours (« Journée », aimanté sur un nombre
- *   entier à la fin) ou la largeur des colonnes (« Équipe », le mécanicien
- *   sous les doigts reste sous les doigts) ; en diagonale, les deux.
- * - Web : Ctrl ou Cmd + molette (et pincement du pavé tactile) pour les
- *   heures, avec Maj en plus pour les jours ou les colonnes.
- * - VoiceOver et TalkBack : deux éléments réglables, sans place à l’écran.
- * Pendant le geste, seules les positions et les largeurs bougent (valeurs
- * partagées, fil d’interface) ; le contenu des cases et le placement se
- * recalculent à la fin, et le zoom est mémorisé dans la vue. Une astuce
- * discrète, en bas de la grille, dit le geste tant qu’on n’a jamais zoomé :
- * au survol de la souris sur le web, quelques secondes à l’ouverture sur le
- * téléphone.
+ * Ce que le jour choisi montre sans créneau ce jour-là (voiture immobilisée
+ * depuis un autre jour, demande à valider, rendez-vous manqué) passe en
+ * puces dans la bande « Hors créneau » : rien de ce que montre la liste ne
+ * disparaît.
+ *
+ * Un seul zoom, lié : un niveau entre 0 et 1 règle à la fois la largeur des
+ * colonnes et la hauteur des heures (`horaire.ts`). Pincement (iOS,
+ * Android), Ctrl ou Cmd + molette (web), un élément réglable (VoiceOver,
+ * TalkBack). Le point sous les doigts reste sous les doigts sur les deux
+ * axes. Pendant le geste, seules les valeurs partagées bougent (fil
+ * d’interface) ; le contenu des cases et le placement se recalculent à la
+ * fin, et le niveau est mémorisé dans la vue. Une astuce discrète, en bas de
+ * la grille, dit le geste tant qu’on n’a jamais zoomé.
  */
 
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, Text, View, type LayoutChangeEvent } from 'react-native';
-import { Gesture, GestureDetector, type GestureTouchEvent } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -56,7 +52,6 @@ import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -70,20 +65,16 @@ import { useTheme } from '@/theme/tokens';
 import { CaseIntervention, motEtat } from './CaseIntervention';
 import {
   HAUTEUR_MIN_CASE,
-  JOURS_MAX,
-  PAS_ZOOM,
-  ZOOM_MAX,
-  ZOOM_MIN,
-  aimanterJours,
-  bornerZoom,
+  LARGEUR_COLONNE_MIN,
+  ancrer,
+  bornerNiveau,
   bornesJours,
-  bornesLargeurEquipe,
+  bornesLargeur,
   creneauDuJour,
-  defilementApresZoom,
-  directionPincement,
-  facteurAxe,
+  hauteurDuNiveau,
   heuresAxe,
-  largeurEquipe as largeurEquipeBornee,
+  largeurDuNiveau,
+  niveauApresEchelle,
   placer,
   zonesFermees,
   type Creneau,
@@ -109,31 +100,20 @@ export type JourGrille = {
 };
 
 type Props = {
-  /**
-   * « Journée » : les jours à partir du premier affiché, jusqu’à 7 (le
-   * pincement peut en montrer davantage que `nbJours`) ; « Équipe » : le
-   * jour choisi seul.
-   */
+  /** « Journée » : les sept jours de la semaine, du lundi ; « Équipe » : le jour choisi seul. */
   jours: JourGrille[];
-  /** « Journée » : jours côte à côte au repos (1 à 7) */
-  nbJours: number;
-  /** Nombre de jours au repos (fin du geste) : mémorisé dans la vue */
-  onNbJours: (n: number) => void;
-  /** « Équipe » : largeur voulue d’une colonne (bornée à l’affichage) */
-  largeurEquipe: number;
-  /** Largeur de colonne au repos (fin du geste) : mémorisée dans la vue */
-  onLargeurEquipe: (l: number) => void;
   jourChoisi: Date;
-  /** Toucher l’en-tête d’un jour (plusieurs jours côte à côte) */
+  /** Toucher l’en-tête d’un jour */
   onChoisirJour: (d: Date) => void;
   disposition: 'journee' | 'equipe';
   /** Colonnes de la disposition « Équipe », dans l’ordre */
   colonnes?: ColonneEquipe[];
   champs: ChampBloc[];
   couleur: CouleurCase;
-  hauteurHeure: number;
-  /** Zoom des heures au repos (fin du geste ou de la molette) : mémorisé dans la vue */
-  onZoom: (h: number) => void;
+  /** Niveau de zoom au repos, de 0 (tout tient) à 1 (une colonne remplit l’écran) */
+  niveau: number;
+  /** Niveau au repos (fin du geste ou de la molette) : mémorisé dans la vue */
+  onNiveau: (t: number) => void;
   /** L’utilisateur n’a encore jamais zoomé : l’astuce du geste se montre */
   astuceZoom?: boolean;
   clientDe: (i: Intervention) => Client | undefined;
@@ -142,6 +122,8 @@ type Props = {
   onOuvrir: (id: string) => void;
   onActions: (id: string) => void;
   margeBasse: number;
+  /** Téléphone couché : la bande « Hors créneau » se tait, la hauteur va à la grille */
+  sansHorsCreneau?: boolean;
 };
 
 /** Durée de l’astuce de zoom à l’ouverture de la grille (téléphone). */
@@ -150,12 +132,10 @@ const DUREE_ASTUCE_MS = 4000;
 const GOUTTIERE = 46;
 /** Marge au-dessus de la première heure : son libellé n’est pas coupé. */
 const HAUT = 10;
-/** « Journée » : marge à droite des colonnes de jours. */
-const MARGE_DROITE = 8;
-/** Demi-heures visibles à partir de ce zoom. */
+/** Demi-heures visibles à partir de cette hauteur d’heure. */
 const ZOOM_DEMI_HEURES = 48;
-/** En-tête des jours (« lun. 9 ») ; sa cible d’appui atteint 44 pt par débordement. */
-const HAUTEUR_ENTETE_JOURS = 28;
+/** En-tête des jours : toute sa hauteur est la cible d’appui. */
+const HAUTEUR_ENTETE_JOURS = 44;
 /** En-tête des colonnes « Équipe », sur une ligne. */
 const HAUTEUR_ENTETE_EQUIPE = 32;
 /** En deçà, une case resserre ses marges. */
@@ -164,37 +144,48 @@ const LARGEUR_CASE_ETROITE = 90;
 const LARGEUR_NB_VOITURES = 100;
 const LARGEUR_CHARGE = 168;
 /** « Journée » : en deçà, l’en-tête dit « L 9 » au lieu de « lun. 9 ». */
-const LARGEUR_JOUR_COURT = 44;
-
-/** Axes du pincement en cours (masque). */
-const VERTICAL = 1;
-const HORIZONTAL = 2;
+const LARGEUR_JOUR_COURT = 60;
+/** Pas de l’élément réglable (VoiceOver, TalkBack), en niveau. */
+const PAS_ACCESSIBLE = 0.2;
+/** Molette : échelle `e^(−deltaY · k)` par événement. */
+const SENSIBILITE_MOLETTE = 0.005;
 
 const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
 const memeJour = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
+/*
+ * Règle de ce fichier : une vue animée ne reçoit qu’UN style, son style animé, qui porte aussi ce qui
+ * est fixe (position, bords, couleur). Sur iPhone, un style fixe posé à côté d’un style animé (tableau
+ * `[fixe, animé]`) ou une `className` sur la vue animée ne sont pas appliqués : les heures passaient à
+ * droite, les colonnes et les cases perdaient leur place (vu sur simulateur le 13 novembre 2026).
+ */
+
 /** Ligne d’heure ou de demi-heure : seule sa position suit le zoom. */
 function Filet({ minutes, debut, h, demi }: { minutes: number; debut: number; h: SharedValue<number>; demi?: boolean }) {
+  const t = useTheme();
+  const couleur = demi ? `${t.line}80` : t.line;
   const style = useAnimatedStyle(() => ({
+    position: 'absolute',
+    left: GOUTTIERE,
+    right: 0,
+    height: 1,
+    backgroundColor: couleur,
     top: HAUT + ((minutes - debut) / 60) * h.value,
     opacity: demi ? (h.value >= ZOOM_DEMI_HEURES ? 1 : 0) : 1,
   }));
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[{ position: 'absolute', left: GOUTTIERE, right: 0, height: 1 }, style]}
-      className={demi ? 'bg-line/50 dark:bg-line-dark/50' : 'bg-line dark:bg-line-dark'}
-    />
-  );
+  return <Animated.View pointerEvents="none" style={style} />;
 }
 
 function LibelleHeure({ minutes, debut, h }: { minutes: number; debut: number; h: SharedValue<number> }) {
   const style = useAnimatedStyle(() => ({
+    position: 'absolute',
+    left: 0,
+    width: GOUTTIERE - 6,
     top: HAUT + ((minutes - debut) / 60) * h.value - 8,
   }));
   return (
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, width: GOUTTIERE - 6 }, style]}>
+    <Animated.View pointerEvents="none" style={style}>
       <Text maxFontSizeMultiplier={1.2} className="text-right font-mono text-[11px] leading-[16px] text-faint dark:text-faint-dark">
         {hhmm(minutes)}
       </Text>
@@ -204,47 +195,57 @@ function LibelleHeure({ minutes, debut, h }: { minutes: number; debut: number; h
 
 /**
  * Trait « maintenant ». `colonne` : rang de la colonne d’aujourd’hui
- * (« Journée »), qu’il est seul à traverser ; null : toute la largeur
+ * (« Journée »), qu’il est seul à traverser ; null : toutes les colonnes
  * (« Équipe », un seul jour).
  */
-function Maintenant({ minutes, debut, h, colonne, w }: { minutes: number; debut: number; h: SharedValue<number>; colonne: number | null; w: SharedValue<number> }) {
+function Maintenant({ minutes, debut, h, w, colonne, nb }: { minutes: number; debut: number; h: SharedValue<number>; w: SharedValue<number>; colonne: number | null; nb: number }) {
   const t = useTheme();
-  const style = useAnimatedStyle(() => {
-    const top = HAUT + ((minutes - debut) / 60) * h.value - 1;
-    return colonne === null ? { top } : { top, left: GOUTTIERE + colonne * w.value - 4, width: w.value + 4 };
-  });
+  const style = useAnimatedStyle(() => ({
+    position: 'absolute',
+    height: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    top: HAUT + ((minutes - debut) / 60) * h.value - 1,
+    left: (colonne ?? 0) * w.value,
+    width: (colonne === null ? nb : 1) * w.value,
+  }));
   return (
-    <Animated.View
-      pointerEvents="none"
-      accessibilityLabel={`Maintenant, ${hhmm(minutes)}`}
-      style={[
-        { position: 'absolute', height: 2, flexDirection: 'row', alignItems: 'center' },
-        colonne === null ? { left: GOUTTIERE - 4, right: 0 } : null,
-        style,
-      ]}>
-      <View className="h-2 w-2 rounded-full" style={{ backgroundColor: t.danger, marginTop: 0 }} />
+    <Animated.View pointerEvents="none" accessibilityLabel={`Maintenant, ${hhmm(minutes)}`} style={style}>
+      <View className="h-2 w-2 rounded-full" style={{ backgroundColor: t.danger }} />
       <View className="h-[2px] flex-1" style={{ backgroundColor: t.danger }} />
     </Animated.View>
   );
 }
 
-/** Colonne (jour ou mécanicien) : sa place et sa largeur suivent le zoom horizontal. */
-function Colonne({ k, w, bord, children }: { k: number; w: SharedValue<number>; bord: boolean; children: ReactNode }) {
-  const style = useAnimatedStyle(() => ({ left: k * w.value, width: w.value }));
-  return (
-    <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0 }, style]} className={bord ? 'border-l border-line dark:border-line-dark' : ''}>
-      {children}
-    </Animated.View>
-  );
+/** Colonne (jour ou mécanicien) : sa place et sa largeur suivent le zoom. */
+function Colonne({ k, w, children }: { k: number; w: SharedValue<number>; children: ReactNode }) {
+  const t = useTheme();
+  const filet = t.line;
+  const style = useAnimatedStyle(() => ({
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: filet,
+    left: k * w.value,
+    width: w.value,
+  }));
+  return <Animated.View style={style}>{children}</Animated.View>;
 }
 
 /** Heures où le garage est fermé ce jour-là : grisées. */
 function ZoneFermee({ zone, debut, h }: { zone: { debut: number; fin: number }; debut: number; h: SharedValue<number> }) {
+  const t = useTheme();
+  const fond = `${t.line}66`;
   const style = useAnimatedStyle(() => ({
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    backgroundColor: fond,
     top: HAUT + ((zone.debut - debut) / 60) * h.value,
     height: ((zone.fin - zone.debut) / 60) * h.value,
   }));
-  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, right: 0 }, style]} className="bg-line/40 dark:bg-line-dark/40" />;
+  return <Animated.View pointerEvents="none" style={style} />;
 }
 
 type PropsCase = {
@@ -261,6 +262,7 @@ const hauteurCase = (place: Creneau, h: number) => {
   return Math.max(HAUTEUR_MIN_CASE, ((place.fin - place.debut) / 60) * h - 2);
 };
 
+/** Case d’une intervention : en pourcentage de sa colonne (toute la largeur, seule dans son créneau), la hauteur suit le zoom. */
 function CaseAnimee({
   place,
   debut,
@@ -276,23 +278,18 @@ function CaseAnimee({
   onOuvrir,
   onActions,
 }: PropsCase) {
+  const gauche = `${(place.colonne / place.nbColonnes) * 100}%` as const;
+  const largeur = `${(place.etendue / place.nbColonnes) * 100}%` as const;
   const style = useAnimatedStyle(() => ({
+    position: 'absolute',
+    left: gauche,
+    width: largeur,
+    paddingHorizontal: 1.5,
     top: HAUT + ((place.debut - debut) / 60) * h.value + 1,
     height: hauteurCase(place, h.value),
   }));
-  const gauche = (place.colonne / place.nbColonnes) * 100;
-  const largeur = (place.etendue / place.nbColonnes) * 100;
   return (
-    <Animated.View
-      style={[
-        {
-          position: 'absolute',
-          left: `${gauche}%`,
-          width: `${largeur}%`,
-          paddingHorizontal: 1.5,
-        },
-        style,
-      ]}>
+    <Animated.View style={style}>
       <CaseIntervention
         intervention={i}
         client={clientDe(i)}
@@ -355,7 +352,7 @@ function BandeHorsCreneau({
   );
 }
 
-/** En-tête d’un jour (« Journée », plusieurs jours) : toucher choisit ce jour. */
+/** En-tête d’un jour (« Journée ») : toucher choisit ce jour. */
 function EnTeteJour({
   k,
   w,
@@ -376,27 +373,28 @@ function EnTeteJour({
   onPress: () => void;
 }) {
   const t = useTheme();
-  const style = useAnimatedStyle(() => ({ left: k * w.value, width: w.value }));
+  const style = useAnimatedStyle(() => ({ position: 'absolute', top: 0, bottom: 0, left: k * w.value, width: w.value }));
   const label = [format(date, 'EEEE d MMMM', { locale: fr }), aujourdhui ? 'aujourd’hui' : null, ferme ? 'fermé' : null].filter(Boolean).join(', ');
   return (
-    <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0 }, style]}>
+    <Animated.View style={style}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
         accessibilityState={{ selected: choisi }}
-        hitSlop={{ top: 8, bottom: 8 }}
         onPress={() => {
           impulsion('leger');
           onPress();
         }}
-        className={`mx-0.5 flex-1 items-center justify-center rounded-md active:opacity-60 ${choisi ? 'bg-surface2 dark:bg-surface2-dark' : ''}`}>
-        <Text
-          numberOfLines={1}
-          maxFontSizeMultiplier={1.2}
-          className={`text-[12px] ${aujourdhui || choisi ? 'font-bold' : 'font-medium'}`}
-          style={{ color: aujourdhui ? t.accent : ferme ? t.faint : t.muted }}>
-          {format(date, court ? 'EEEEE d' : 'EEE d', { locale: fr })}
-        </Text>
+        className="flex-1 items-center justify-center active:opacity-60">
+        <View className={`rounded-md px-1.5 py-1 ${choisi ? 'bg-surface2 dark:bg-surface2-dark' : ''}`}>
+          <Text
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.2}
+            className={`text-[12px] ${aujourdhui || choisi ? 'font-bold' : 'font-medium'}`}
+            style={{ color: aujourdhui ? t.accent : ferme ? t.faint : t.muted }}>
+            {format(date, court ? 'EEEEE d' : 'EEE d', { locale: fr })}
+          </Text>
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -407,7 +405,17 @@ const texteCharge = (c: { nb: number; minutes: number }) =>
 
 /** En-tête d’une colonne « Équipe », sur une ligne : ce qui ne tient pas se tait. */
 function EnTeteMembre({ k, w, colonne: c, largeur, nbAAttribuer }: { k: number; w: SharedValue<number>; colonne: ColonneEquipe; largeur: number; nbAAttribuer: number }) {
-  const style = useAnimatedStyle(() => ({ left: k * w.value, width: w.value }));
+  const style = useAnimatedStyle(() => ({
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 6,
+    left: k * w.value,
+    width: w.value,
+  }));
   const nb = c.charge ? c.charge.nb : nbAAttribuer;
   const complet = c.charge ? texteCharge(c.charge) : pluriel(nbAAttribuer, 'voiture');
   const nom = c.membre ? c.membre.prenom : 'À attribuer';
@@ -417,7 +425,7 @@ function EnTeteMembre({ k, w, colonne: c, largeur, nbAAttribuer }: { k: number; 
     <Animated.View
       accessible
       accessibilityLabel={`${nom}, ${complet.replace(' · ', ', ')}`}
-      style={[{ position: 'absolute', top: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 6 }, style]}>
+      style={style}>
       {c.membre ? (
         <Avatar membre={c.membre} taille={20} />
       ) : (
@@ -438,37 +446,10 @@ function EnTeteMembre({ k, w, colonne: c, largeur, nbAAttribuer }: { k: number; 
 /** Sur un Mac, le zoom à la molette se fait avec ⌘ : l’astuce le dit. */
 const SUR_MAC = Platform.OS === 'web' && typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);
 
-/**
- * Élément DOM qui défile sur cet axe sous `racine` (web). La référence
- * animée de Reanimated ne donne pas cet élément : on le lit dans le DOM.
- */
-function defilantDans(racine: HTMLElement, axe: 'x' | 'y'): HTMLElement | null {
-  for (const d of Array.from(racine.querySelectorAll<HTMLElement>('div'))) {
-    const s = getComputedStyle(d);
-    const o = axe === 'y' ? s.overflowY : s.overflowX;
-    if (o === 'auto' || o === 'scroll') return d;
-  }
-  return null;
-}
+type Defilant = { scrollTo?: (o: { x?: number; y?: number; animated: boolean }) => void } | null;
 
 export function GrilleHoraire(props: Props) {
-  const {
-    jours,
-    nbJours,
-    onNbJours,
-    largeurEquipe,
-    onLargeurEquipe,
-    jourChoisi,
-    onChoisirJour,
-    disposition,
-    colonnes = [],
-    champs,
-    couleur,
-    hauteurHeure,
-    onZoom,
-    astuceZoom,
-    margeBasse,
-  } = props;
+  const { jours, jourChoisi, onChoisirJour, disposition, colonnes = [], champs, couleur, niveau, onNiveau, astuceZoom, margeBasse } = props;
   const equipe = disposition === 'equipe';
 
   // ── Ce que chaque jour montre avec un créneau ce jour-là, et ce qu’il montre sans
@@ -489,113 +470,78 @@ export function GrilleHoraire(props: Props) {
       }),
     [jours],
   );
-
-  // ── Jours montrés au repos, jours rendus (tous pendant un pincement horizontal : ceux qui entrent sont déjà là)
-  const [pince, setPince] = useState(0);
-  const n = equipe ? 1 : Math.max(1, Math.min(nbJours, parJour.length));
-  const montres = parJour.slice(0, n);
-  const rendus = equipe || !(pince & HORIZONTAL) ? montres : parJour;
+  const rangChoisi = Math.max(
+    0,
+    parJour.findIndex((p) => memeJour(p.jour.date, jourChoisi)),
+  );
+  const duJourChoisi = parJour[rangChoisi];
+  const horsCreneau = duJourChoisi?.hors ?? [];
 
   const { debut, fin } = useMemo(
     () =>
       bornesJours(
-        montres.map((p) => p.jour.plage),
-        montres.flatMap((p) => [...p.creneaux.values()]),
+        parJour.map((p) => p.jour.plage),
+        parJour.flatMap((p) => [...p.creneaux.values()]),
       ),
-    [montres],
+    [parJour],
   );
 
-  // Hors créneau : chaque voiture une fois, et pas celle qui a déjà sa case un des jours montrés.
-  const horsCreneau = useMemo(() => {
-    const avecCase = new Set(montres.flatMap((p) => p.avec.map((i) => i.id)));
-    const vues = new Set<string>();
-    const liste: Intervention[] = [];
-    for (const p of montres)
-      for (const i of p.hors) {
-        if (avecCase.has(i.id) || vues.has(i.id)) continue;
-        vues.add(i.id);
-        liste.push(i);
-      }
-    return liste;
-  }, [montres]);
-
-  // ── Zoom des heures : valeur partagée pendant le geste, état au repos
-  const h = useSharedValue(hauteurHeure);
-  const [repos, setRepos] = useState(hauteurHeure);
-  useEffect(() => {
-    if (Math.abs(h.value - hauteurHeure) > 0.5) h.value = hauteurHeure;
-    setRepos(hauteurHeure);
-  }, [hauteurHeure, h]);
-
-  const finZoom = useCallback(
-    (nh: number) => {
-      const b = bornerZoom(nh);
-      setRepos(b);
-      onZoom(b);
-    },
-    [onZoom],
-  );
-
-  // ── Dimensions
+  // ── Dimensions : la largeur disponible pour les colonnes, à droite de la gouttière
   const [vue, setVue] = useState({ l: 0, h: 0 });
   const surMesure = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     if (width !== vue.l || height !== vue.h) setVue({ l: width, h: height });
   };
-  const nbColonnes = equipe ? colonnes.length : 1;
-  const disponible = Math.max(0, vue.l - GOUTTIERE - (equipe ? 0 : MARGE_DROITE));
+  const nbColonnes = equipe ? colonnes.length : parJour.length;
+  const disponible = Math.max(0, vue.l - GOUTTIERE);
+  const { min: wMin, max: wMax } = bornesLargeur(disponible, nbColonnes, equipe ? LARGEUR_COLONNE_MIN : 0);
+  const hauteurVue = vue.h;
 
-  // ── Zoom horizontal : largeur d’une colonne (jour ou mécanicien), partagée pendant le geste
-  const largeurRepos = equipe ? largeurEquipeBornee(largeurEquipe, disponible, nbColonnes) : disponible / n;
-  const w = useSharedValue(largeurRepos);
-  const dispo = useSharedValue(disponible);
-  // Dernière largeur posée : la fin du geste la pose elle-même (en douceur), le rendu qui suit ne la repose pas.
-  const cibleW = useRef(largeurRepos);
+  // ── Zoom lié : un niveau, deux valeurs partagées (largeur d’une colonne, hauteur d’une heure), posées au repos
+  const wRepos = largeurDuNiveau(niveau, wMin, wMax);
+  const hRepos = hauteurDuNiveau(niveau);
+  const t = useSharedValue(niveau);
+  const w = useSharedValue(wRepos);
+  const h = useSharedValue(hRepos);
   useEffect(() => {
-    dispo.value = disponible;
-  }, [disponible, dispo]);
+    t.value = niveau;
+    w.value = wRepos;
+    h.value = hRepos;
+  }, [niveau, wRepos, hRepos, t, w, h]);
+  const surNiveau = useRef(onNiveau);
   useEffect(() => {
-    if (Math.abs(cibleW.current - largeurRepos) < 0.5) return;
-    cibleW.current = largeurRepos;
-    w.value = largeurRepos;
-  }, [largeurRepos, w]);
-
-  const finJours = useCallback(
-    (nf: number, cible: number) => {
-      cibleW.current = cible;
-      onNbJours(nf);
-    },
-    [onNbJours],
-  );
-  const finLargeur = useCallback(
-    (l: number) => {
-      cibleW.current = l;
-      onLargeurEquipe(l);
-    },
-    [onLargeurEquipe],
-  );
+    surNiveau.current = onNiveau;
+  });
+  const finZoom = useCallback((n: number) => surNiveau.current(n), []);
 
   // ── Placement, colonne par colonne
-  const dureeVisible = (HAUTEUR_MIN_CASE / repos) * 60;
+  const dureeVisible = (HAUTEUR_MIN_CASE / hRepos) * 60;
   const colonnesCases = useMemo(() => {
-    const groupes: { cle: string; liste: Intervention[]; creneaux: Map<string, Creneau> }[] = equipe
+    const groupes = equipe
       ? colonnes.map((c) => ({
           cle: c.membre?.id ?? 'a-attribuer',
+          jour: parJour[0],
           liste: (parJour[0]?.avec ?? []).filter((i) => (i.membreId ?? null) === (c.membre?.id ?? null)),
-          creneaux: parJour[0]?.creneaux ?? new Map<string, Creneau>(),
         }))
-      : rendus.map((p) => ({ cle: p.cle, liste: p.avec, creneaux: p.creneaux }));
-    return groupes.map((g) => ({
-      cle: g.cle,
-      places: placer(
-        g.liste.map((i) => g.creneaux.get(i.id)!),
-        dureeVisible,
-      ),
-      parId: new Map(g.liste.map((i) => [i.id, i])),
-    }));
-  }, [equipe, colonnes, parJour, rendus, dureeVisible]);
+      : parJour.map((p) => ({ cle: p.cle, jour: p, liste: p.avec }));
+    return groupes.map((g) => {
+      const zones = zonesFermees(g.jour?.jour.plage, debut, fin);
+      return {
+        cle: g.cle,
+        zones,
+        ferme: zones.length === 1 && zones[0].debut === debut && zones[0].fin === fin,
+        places: placer(
+          g.liste.map((i) => g.jour!.creneaux.get(i.id)!),
+          dureeVisible,
+        ),
+        parId: new Map(g.liste.map((i) => [i.id, i])),
+      };
+    });
+  }, [equipe, colonnes, parJour, debut, fin, dureeVisible]);
 
-  // ── Défilement
+  // ── Défilement : vertical (heures), horizontal (colonnes), l’en-tête suit l’horizontal.
+  // `scrollToOverflowEnabled` (iOS) : sans lui, `scrollTo` se borne à la taille du contenu d’avant le zoom,
+  // qui n’a pas encore grandi dans la même image ; le point sous les doigts glisserait en zoomant.
   const defilement = useAnimatedRef<Animated.ScrollView>();
   const defilementX = useAnimatedRef<Animated.ScrollView>();
   const defil = useSharedValue(0);
@@ -606,14 +552,16 @@ export function GrilleHoraire(props: Props) {
   const surDefilementX = useAnimatedScrollHandler((e) => {
     defilX.value = e.contentOffset.x;
   });
-
-  const contenu = useAnimatedStyle(() => ({
-    height: HAUT + ((fin - debut) / 60) * h.value + margeBasse,
-  }));
-  const largeurContenuX = useAnimatedStyle(() => ({ width: w.value * nbColonnes }));
-  const enTeteSuit = useAnimatedStyle(() => ({
-    transform: [{ translateX: -defilX.value }],
-  }));
+  const contenu = useAnimatedStyle(() => ({ height: HAUT + ((fin - debut) / 60) * h.value + margeBasse }));
+  const largeurContenuX = useAnimatedStyle(() => ({ height: '100%', width: w.value * nbColonnes }));
+  const enTeteSuit = useAnimatedStyle(() => ({ flex: 1, transform: [{ translateX: -defilX.value }] }));
+  const defiler = useCallback(
+    (x: number | null, y: number | null, animated = false) => {
+      if (x !== null) (defilementX.current as unknown as Defilant)?.scrollTo?.({ x, y: 0, animated });
+      if (y !== null) (defilement.current as unknown as Defilant)?.scrollTo?.({ x: 0, y, animated });
+    },
+    [defilement, defilementX],
+  );
 
   // Maintenant, remis à jour chaque minute : seulement si aujourd’hui est montré.
   const [maintenant, setMaintenant] = useState(() => new Date());
@@ -623,254 +571,179 @@ export function GrilleHoraire(props: Props) {
       clearInterval(minuterie);
     };
   }, []);
-  const rangAujourdhui = rendus.findIndex((p) => memeJour(p.jour.date, maintenant));
+  const rangAujourdhui = parJour.findIndex((p) => memeJour(p.jour.date, maintenant));
   const minutesMaintenant = maintenant.getHours() * 60 + maintenant.getMinutes();
-  const maintenantVisible = rangAujourdhui >= 0 && minutesMaintenant >= debut && minutesMaintenant <= fin;
-  const aujourdhuiMontre = montres.some((p) => memeJour(p.jour.date, maintenant));
+  const surMaintenant = rangAujourdhui >= 0 && minutesMaintenant >= debut && minutesMaintenant <= fin;
 
-  const defilerVers = useCallback(
-    (y: number) => {
-      const r = defilement.current as unknown as {
-        scrollTo?: (o: { y: number; animated: boolean }) => void;
-      } | null;
-      r?.scrollTo?.({ y: Math.max(0, y), animated: false });
-    },
-    [defilement],
-  );
-
-  // Défilement initial : l’heure courante (un tiers depuis le haut), sinon la première case.
-  const premiereCase = Math.min(...montres.flatMap((p) => [...p.creneaux.values()].map((c) => c.debut)));
+  // Défilement vertical initial (nouvelle semaine, nouveau jour en « Équipe ») : l’heure courante à un tiers du haut, sinon la première case du jour choisi.
+  const creneauxChoisis = [...(duJourChoisi?.creneaux.values() ?? [])].map((c) => c.debut);
+  const premiereCase = Math.min(...(creneauxChoisis.length ? creneauxChoisis : parJour.flatMap((p) => [...p.creneaux.values()].map((c) => c.debut))));
   const cleJour = `${parJour[0]?.cle ?? ''}-${disposition}`;
   const dejaPlace = useRef<string | null>(null);
   useEffect(() => {
-    if (vue.h === 0 || dejaPlace.current === cleJour) return;
+    if (hauteurVue === 0 || dejaPlace.current === cleJour) return;
     dejaPlace.current = cleJour;
-    const surMaintenant = aujourdhuiMontre && minutesMaintenant >= debut && minutesMaintenant <= fin;
     const cible = surMaintenant ? minutesMaintenant : Number.isFinite(premiereCase) ? premiereCase - 30 : debut;
-    const y = HAUT + ((cible - debut) / 60) * h.value - (surMaintenant ? vue.h / 3 : 0);
-    requestAnimationFrame(() => {
-      defilerVers(y);
-    });
-  }, [vue.h, cleJour, aujourdhuiMontre, minutesMaintenant, premiereCase, debut, fin, h, defilerVers]);
+    const y = HAUT + ((cible - debut) / 60) * hRepos - (surMaintenant ? hauteurVue / 3 : 0);
+    requestAnimationFrame(() => defiler(null, Math.max(0, y)));
+  }, [hauteurVue, cleJour, surMaintenant, minutesMaintenant, premiereCase, debut, hRepos, defiler]);
 
-  // ── Zoom par les éléments réglables (VoiceOver, TalkBack)
-  const zoomer = (facteur: number) => {
-    const avant = h.value;
-    const apres = bornerZoom(avant * facteur);
-    if (apres === avant) return;
-    // Le centre de la zone visible reste en place.
-    const y = defilementApresZoom(defil.value, vue.h / 2, avant, apres);
-    h.value = apres;
-    finZoom(apres);
+  // « Journée » : la grille défile jusqu’au jour choisi quand il change (ou la largeur disponible : rotation). Pas après un zoom.
+  // Si le contenu n’a pas encore sa nouvelle largeur (ouverture, rotation), le calage attend qu’il l’ait.
+  const cleCalage = `${disposition}-${jourChoisi.toDateString()}-${Math.round(disponible)}`;
+  const dejaCale = useRef<string | null>(null);
+  const calage = useRef<number | null>(null);
+  const largeurContenu = useRef(0);
+  useEffect(() => {
+    if (equipe || disponible <= 0 || dejaCale.current === cleCalage) return;
+    const anime = dejaCale.current !== null;
+    dejaCale.current = cleCalage;
+    const x = Math.min(Math.max(0, wRepos * nbColonnes - disponible), rangChoisi * wRepos);
+    calage.current = x;
     requestAnimationFrame(() => {
-      defilerVers(y);
+      defiler(x, null, anime);
+      if (largeurContenu.current >= x + disponible - 1) calage.current = null;
     });
-  };
-  const elargirAccessible = (sens: 1 | -1) => {
-    if (equipe) {
-      const b = bornesLargeurEquipe(disponible, nbColonnes);
-      const l = Math.min(b.max, Math.max(b.min, sens > 0 ? largeurRepos * PAS_ZOOM : largeurRepos / PAS_ZOOM));
-      if (l === largeurRepos) return;
-      w.value = l;
-      finLargeur(l);
-      return;
-    }
-    // « Plus » : un jour de plus côte à côte.
-    const nf = Math.max(1, Math.min(JOURS_MAX, n + sens));
-    if (nf === n || disponible <= 0) return;
-    w.value = disponible / nf;
-    finJours(nf, disponible / nf);
+  }, [equipe, cleCalage, disponible, wRepos, nbColonnes, rangChoisi, defiler]);
+  const surTailleContenuX = (largeur: number) => {
+    largeurContenu.current = largeur;
+    const x = calage.current;
+    if (x === null || largeur < x + disponible - 1) return;
+    calage.current = null;
+    defiler(x, null);
   };
 
-  // ── Pincement (iOS, Android) : direction choisie au début d’après l’écart des deux doigts sur chaque axe.
-  const ecartX = useSharedValue(0);
-  const ecartY = useSharedValue(0);
-  const departX = useSharedValue(0);
-  const departY = useSharedValue(0);
-  const axes = useSharedValue(0);
-  const hDepart = useSharedValue(hauteurHeure);
-  const defilDepart = useSharedValue(0);
-  const focalDepart = useSharedValue(0);
+  // ── Pincement (iOS, Android) : un seul zoom, largeur et hauteur ensemble, le point sous les doigts reste sous les doigts.
+  const [pince, setPince] = useState(false);
+  const doigts = useSharedValue(0);
+  const echelleDepart = useSharedValue(1);
+  const tDepart = useSharedValue(0);
   const wDepart = useSharedValue(0);
-  const defilXDepart = useSharedValue(0);
-  const focalXDepart = useSharedValue(0);
+  const hDepart = useSharedValue(0);
+  const xDepart = useSharedValue(0);
+  const yDepart = useSharedValue(0);
+  const fxDepart = useSharedValue(0);
+  const fyDepart = useSharedValue(0);
   const pincement = useMemo(() => {
-    const lireEcarts = (e: GestureTouchEvent) => {
+    // Départ (ou nouveau départ quand un doigt se lève ou se pose : le point focal saute, on repart d’ici sans à-coup).
+    const repartir = (e: { scale: number; focalX: number; focalY: number; numberOfPointers: number }) => {
       'worklet';
-      if (e.allTouches.length < 2) return;
-      ecartX.value = Math.abs(e.allTouches[0].x - e.allTouches[1].x);
-      ecartY.value = Math.abs(e.allTouches[0].y - e.allTouches[1].y);
+      doigts.value = e.numberOfPointers;
+      echelleDepart.value = e.scale;
+      tDepart.value = t.value;
+      wDepart.value = w.value;
+      hDepart.value = h.value;
+      xDepart.value = defilX.value;
+      yDepart.value = defil.value;
+      fxDepart.value = e.focalX - GOUTTIERE;
+      fyDepart.value = e.focalY;
     };
     return Gesture.Pinch()
-      .onTouchesDown((e) => {
-        'worklet';
-        lireEcarts(e);
-      })
-      .onTouchesMove((e) => {
-        'worklet';
-        lireEcarts(e);
-      })
       .onStart((e) => {
         'worklet';
-        const sens = directionPincement(ecartX.value, ecartY.value);
-        const m = sens === 'vertical' ? VERTICAL : sens === 'horizontal' ? HORIZONTAL : VERTICAL | HORIZONTAL;
-        axes.value = m;
-        departX.value = ecartX.value;
-        departY.value = ecartY.value;
-        hDepart.value = h.value;
-        defilDepart.value = defil.value;
-        focalDepart.value = e.focalY;
-        wDepart.value = w.value;
-        defilXDepart.value = defilX.value;
-        focalXDepart.value = e.focalX - GOUTTIERE;
-        scheduleOnRN(setPince, m);
+        repartir(e);
+        scheduleOnRN(setPince, true);
       })
       .onUpdate((e) => {
         'worklet';
-        const m = axes.value;
-        const deux = (m & VERTICAL) !== 0 && (m & HORIZONTAL) !== 0;
-        if (m & VERTICAL) {
-          // En diagonale, chaque axe suit l’écart des doigts sur lui-même.
-          const f = deux ? facteurAxe(departY.value, ecartY.value, e.scale) : e.scale;
-          const nh = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, hDepart.value * f));
-          // Point d’ancrage gardé sous les doigts, qui peuvent aussi glisser pendant le pincement.
-          const y = defilementApresZoom(defilDepart.value, focalDepart.value, hDepart.value, nh) + (focalDepart.value - e.focalY);
-          h.value = nh;
-          scrollTo(defilement, 0, Math.max(0, y), false);
-        }
-        if (m & HORIZONTAL) {
-          const f = deux ? facteurAxe(departX.value, ecartX.value, e.scale) : e.scale;
-          const d = dispo.value;
-          if (equipe) {
-            const b = bornesLargeurEquipe(d, nbColonnes);
-            const nw = Math.min(b.max, Math.max(b.min, wDepart.value * f));
-            // Le mécanicien sous les doigts reste sous les doigts.
-            const x = defilementApresZoom(defilXDepart.value, focalXDepart.value, wDepart.value, nw) + (focalXDepart.value - (e.focalX - GOUTTIERE));
-            w.value = nw;
-            scrollTo(defilementX, Math.min(Math.max(0, nw * nbColonnes - d), Math.max(0, x)), 0, false);
-          } else if (d > 0) {
-            // Les jours partent du bord gauche : écarter les doigts élargit, les rapprocher fait entrer des jours.
-            w.value = Math.min(d, Math.max(d / JOURS_MAX, wDepart.value * f));
-          }
-        }
+        if (e.numberOfPointers !== doigts.value) repartir(e);
+        if (e.numberOfPointers < 2 || echelleDepart.value <= 0) return;
+        const nt = niveauApresEchelle(tDepart.value, e.scale / echelleDepart.value, wMin, wMax);
+        const nw = largeurDuNiveau(nt, wMin, wMax);
+        const nh = hauteurDuNiveau(nt);
+        const x = ancrer(xDepart.value, fxDepart.value, e.focalX - GOUTTIERE, wDepart.value, nw, 0, nw * nbColonnes - disponible);
+        const y = ancrer(yDepart.value, fyDepart.value, e.focalY, hDepart.value, nh, HAUT, HAUT + ((fin - debut) / 60) * nh + margeBasse - hauteurVue);
+        t.value = nt;
+        w.value = nw;
+        h.value = nh;
+        defilX.value = x;
+        defil.value = y;
+        scrollTo(defilementX, x, 0, false);
+        scrollTo(defilement, 0, y, false);
       })
       .onEnd(() => {
         'worklet';
-        const m = axes.value;
-        if (m & VERTICAL) scheduleOnRN(finZoom, h.value);
-        if (m & HORIZONTAL) {
-          if (equipe) scheduleOnRN(finLargeur, w.value);
-          else {
-            const d = dispo.value;
-            const nf = aimanterJours(d, w.value);
-            const cible = d / nf;
-            w.value = withTiming(cible, { duration: 180 });
-            scheduleOnRN(finJours, nf, cible);
-          }
-        }
+        scheduleOnRN(finZoom, t.value);
       })
       .onFinalize(() => {
         'worklet';
-        axes.value = 0;
-        scheduleOnRN(setPince, 0);
+        scheduleOnRN(setPince, false);
       });
   }, [
-    ecartX,
-    ecartY,
-    departX,
-    departY,
-    axes,
+    doigts,
+    echelleDepart,
+    tDepart,
+    wDepart,
+    hDepart,
+    xDepart,
+    yDepart,
+    fxDepart,
+    fyDepart,
+    t,
+    w,
     h,
     defil,
-    hDepart,
-    defilDepart,
-    focalDepart,
-    w,
-    dispo,
-    wDepart,
     defilX,
-    defilXDepart,
-    focalXDepart,
     defilement,
     defilementX,
-    equipe,
+    wMin,
+    wMax,
     nbColonnes,
+    disponible,
+    debut,
+    fin,
+    margeBasse,
+    hauteurVue,
     finZoom,
-    finLargeur,
-    finJours,
   ]);
 
-  // ── Web : Ctrl ou Cmd + molette (et pincement du pavé tactile, même événement) pour les heures ; avec Maj, jours ou colonnes.
+  /**
+   * Zoom hors pincement (molette, VoiceOver) vers le niveau `cible`, le
+   * point (fx, fy) de la zone visible gardé en place. Renvoie le niveau
+   * atteint, ou null s’il ne change pas.
+   */
+  const zoomer = (cible: number, fx: number, fy: number): number | null => {
+    const nt = bornerNiveau(cible);
+    if (Math.abs(nt - t.value) < 1e-4) return null;
+    const nw = largeurDuNiveau(nt, wMin, wMax);
+    const nh = hauteurDuNiveau(nt);
+    const x = ancrer(defilX.value, fx, fx, w.value, nw, 0, nw * nbColonnes - disponible);
+    const y = ancrer(defil.value, fy, fy, h.value, nh, HAUT, HAUT + ((fin - debut) / 60) * nh + margeBasse - hauteurVue);
+    t.value = nt;
+    w.value = nw;
+    h.value = nh;
+    defilX.value = x;
+    defil.value = y;
+    // Le défilement attend que la nouvelle taille du contenu soit posée.
+    requestAnimationFrame(() => defiler(x, y));
+    return nt;
+  };
+  // Dernier `zoomer` et dernières bornes, pour l’écouteur de la molette posé une seule fois.
+  const zoomerRef = useRef(zoomer);
+  const echelleRef = useRef({ wMin, wMax });
+  useEffect(() => {
+    zoomerRef.current = zoomer;
+    echelleRef.current = { wMin, wMax };
+  });
+
+  // ── Web : Ctrl ou Cmd + molette (et pincement du pavé tactile, même événement). Positions lues sur le cadre, jamais sur le nœud défilant.
   const cadreWeb = useRef<View>(null);
   const [survol, setSurvol] = useState(false);
-  const zoomWeb = useRef<{
-    h: number;
-    w: number;
-    minuterie: ReturnType<typeof setTimeout> | null;
-    minuterieX: ReturnType<typeof setTimeout> | null;
-  }>({ h: hauteurHeure, w: 0, minuterie: null, minuterieX: null });
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;
     const racine = cadreWeb.current as unknown as HTMLElement | null;
     if (!racine || typeof racine.addEventListener !== 'function') return undefined;
-    const z = zoomWeb.current;
+    let minuterie: ReturnType<typeof setTimeout> | null = null;
     const surRoulette = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      if (e.shiftKey) {
-        // Avec Maj, le navigateur passe souvent le défilement à l’horizontale : deltaX.
-        const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
-        if (!delta || disponible <= 0) return;
-        const avant = w.value;
-        if (equipe) {
-          const b = bornesLargeurEquipe(disponible, nbColonnes);
-          const apres = Math.min(b.max, Math.max(b.min, avant * Math.exp(-delta * 0.004)));
-          if (apres === avant) return;
-          const noeudX = defilantDans(racine, 'x');
-          if (noeudX) {
-            const focal = e.clientX - noeudX.getBoundingClientRect().left;
-            const x = defilementApresZoom(noeudX.scrollLeft, focal, avant, apres);
-            requestAnimationFrame(() => {
-              noeudX.scrollLeft = x;
-            });
-          }
-          w.value = apres;
-          z.w = apres;
-          if (z.minuterieX) clearTimeout(z.minuterieX);
-          z.minuterieX = setTimeout(() => finLargeur(z.w), 120);
-          return;
-        }
-        const apres = Math.min(disponible, Math.max(disponible / JOURS_MAX, avant * Math.exp(-delta * 0.004)));
-        if (apres === avant) return;
-        w.value = apres;
-        z.w = apres;
-        setPince((m) => m | HORIZONTAL);
-        if (z.minuterieX) clearTimeout(z.minuterieX);
-        z.minuterieX = setTimeout(() => {
-          const nf = aimanterJours(disponible, z.w);
-          const cible = disponible / nf;
-          w.value = withTiming(cible, { duration: 180 });
-          finJours(nf, cible);
-          setPince((m) => m & ~HORIZONTAL);
-        }, 160);
-        return;
-      }
-      // Cherché ici seulement : pendant le zoom horizontal la grille ne défile plus (`scrollEnabled`), ce nœud n’existe pas.
-      const noeud = defilantDans(racine, 'y');
-      if (!noeud) return;
-      const avant = h.value;
-      const apres = bornerZoom(avant * Math.exp(-e.deltaY * 0.01));
-      if (apres === avant) return;
-      const focal = e.clientY - noeud.getBoundingClientRect().top;
-      const y = defilementApresZoom(noeud.scrollTop, focal, avant, apres);
-      h.value = apres;
-      requestAnimationFrame(() => {
-        noeud.scrollTop = y;
-      });
+      const r = racine.getBoundingClientRect();
+      const { wMin: min, wMax: max } = echelleRef.current;
+      const cible = niveauApresEchelle(t.value, Math.exp(-e.deltaY * SENSIBILITE_MOLETTE), min, max);
+      if (zoomerRef.current(cible, e.clientX - r.left - GOUTTIERE, e.clientY - r.top) === null) return;
       // Contenu des cases et placement recalculés quand la molette s’arrête.
-      z.h = apres;
-      if (z.minuterie) clearTimeout(z.minuterie);
-      z.minuterie = setTimeout(() => finZoom(z.h), 120);
+      if (minuterie) clearTimeout(minuterie);
+      minuterie = setTimeout(() => finZoom(t.value), 120);
     };
     // L’astuce de zoom suit la souris : elle n’existe que pour qui peut survoler.
     const entree = () => setSurvol(true);
@@ -879,14 +752,15 @@ export function GrilleHoraire(props: Props) {
     racine.addEventListener('mouseenter', entree);
     racine.addEventListener('mouseleave', sortie);
     return () => {
+      if (minuterie) clearTimeout(minuterie);
       racine.removeEventListener('wheel', surRoulette);
       racine.removeEventListener('mouseenter', entree);
       racine.removeEventListener('mouseleave', sortie);
     };
-  }, [h, w, finZoom, finJours, finLargeur, equipe, nbColonnes, disponible]);
+  }, [t, finZoom]);
 
   const heures = heuresAxe(debut, fin);
-  const nbCases = montres.reduce((s, p) => s + p.avec.length, 0);
+  const nbCases = parJour.reduce((s, p) => s + p.avec.length, 0);
 
   // ── Astuce de zoom : au survol (web), quelques secondes à l’ouverture (téléphone), jusqu’au premier zoom.
   const [accueil, setAccueil] = useState(Platform.OS !== 'web');
@@ -898,36 +772,36 @@ export function GrilleHoraire(props: Props) {
     };
   }, [accueil]);
   const astuceVisible = Boolean(astuceZoom) && nbCases > 0 && (Platform.OS === 'web' ? survol : accueil);
-  const enLargeur = equipe ? 'colonnes' : 'jours';
-  const touche = SUR_MAC ? '⌘' : 'Ctrl';
-  const texteAstuce =
-    Platform.OS !== 'web'
-      ? `Pincez : en hauteur les heures, en largeur les ${enLargeur}`
-      : `${touche} + molette : heures · ${touche} + Maj + molette : ${enLargeur}`;
+  const texteAstuce = Platform.OS !== 'web' ? 'Pincez pour zoomer' : `${SUR_MAC ? '⌘' : 'Ctrl'} + molette pour zoomer`;
 
-  const casesDe = (g: (typeof colonnesCases)[number]) =>
-    g.places.map((place) => (
-      <CaseAnimee
-        key={place.id}
-        place={place}
-        debut={debut}
-        h={h}
-        hauteurRepos={repos}
-        etroite={place.etendue < place.nbColonnes || (largeurRepos * place.etendue) / place.nbColonnes < LARGEUR_CASE_ETROITE}
-        intervention={g.parId.get(place.id)!}
-        champs={champs}
-        couleur={couleur}
-        clientDe={props.clientDe}
-        vehiculeDe={props.vehiculeDe}
-        mecanicienDe={props.mecanicienDe}
-        onOuvrir={props.onOuvrir}
-        onActions={props.onActions}
-      />
-    ));
+  const nbAAttribuer = (parJour[0]?.jour.interventions ?? []).filter((i) => !i.membreId && i.statut !== 'livre' && i.statut !== 'annule').length;
 
-  const plusieursJours = !equipe && rendus.length > 1;
-  const zonesEquipe = equipe ? zonesFermees(parJour[0]?.jour.plage, debut, fin) : [];
-  const equipeFermee = equipe && parJour[0] !== undefined && zonesEquipe.length === 1 && zonesEquipe[0].debut === debut && zonesEquipe[0].fin === fin;
+  const enTete = (
+    <View className="flex-row border-b border-line dark:border-line-dark" style={{ height: equipe ? HAUTEUR_ENTETE_EQUIPE : HAUTEUR_ENTETE_JOURS }}>
+      <View style={{ width: GOUTTIERE }} />
+      <View className="flex-1 overflow-hidden">
+        <Animated.View style={enTeteSuit}>
+          {equipe
+            ? colonnes.map((c, k) => (
+                <EnTeteMembre key={c.membre?.id ?? 'a-attribuer'} k={k} w={w} colonne={c} largeur={wRepos} nbAAttribuer={nbAAttribuer} />
+              ))
+            : parJour.map((p, k) => (
+                <EnTeteJour
+                  key={p.cle}
+                  k={k}
+                  w={w}
+                  date={p.jour.date}
+                  aujourdhui={memeJour(p.jour.date, maintenant)}
+                  choisi={k === rangChoisi}
+                  ferme={colonnesCases[k]?.ferme ?? false}
+                  court={wRepos < LARGEUR_JOUR_COURT}
+                  onPress={() => onChoisirJour(p.jour.date)}
+                />
+              ))}
+        </Animated.View>
+      </View>
+    </View>
+  );
 
   const grille = (
     <Animated.View style={{ flex: 1 }} onLayout={surMesure}>
@@ -936,8 +810,9 @@ export function GrilleHoraire(props: Props) {
         onScroll={surDefilement}
         scrollEventThrottle={16}
         scrollEnabled={!pince}
+        scrollToOverflowEnabled
         showsVerticalScrollIndicator={false}
-        accessibilityLabel={`Grille horaire, ${pluriel(nbCases, 'intervention')} avec un créneau ${n > 1 ? `sur ${n} jours` : 'ce jour'}`}>
+        accessibilityLabel={`Grille horaire, ${pluriel(nbCases, 'intervention')} avec un créneau ${equipe ? 'ce jour' : 'cette semaine'}`}>
         <Animated.View style={contenu}>
           {heures.map((m) => (
             <Filet key={`h${m}`} minutes={m} debut={debut} h={h} />
@@ -948,68 +823,61 @@ export function GrilleHoraire(props: Props) {
           {heures.map((m) => (
             <LibelleHeure key={`l${m}`} minutes={m} debut={debut} h={h} />
           ))}
-          <View
-            style={{
-              position: 'absolute',
-              left: GOUTTIERE,
-              right: equipe ? 0 : MARGE_DROITE,
-              top: 0,
-              bottom: 0,
-              overflow: 'hidden',
-            }}>
-            {equipe ? (
-              <Animated.ScrollView
-                ref={defilementX}
-                horizontal
-                style={{ flex: 1 }}
-                contentContainerStyle={{ height: '100%' }}
-                onScroll={surDefilementX}
-                scrollEventThrottle={16}
-                scrollEnabled={!pince}
-                showsHorizontalScrollIndicator={false}
-                bounces={false}>
-                <Animated.View style={[{ height: '100%' }, largeurContenuX]}>
-                  {zonesEquipe.map((z) => (
-                    <ZoneFermee key={`f${z.debut}`} zone={z} debut={debut} h={h} />
-                  ))}
-                  {colonnesCases.map((g, k) => (
-                    <Colonne key={g.cle} k={k} w={w} bord>
-                      {casesDe(g)}
-                    </Colonne>
-                  ))}
-                </Animated.View>
-              </Animated.ScrollView>
-            ) : (
-              rendus.map((p, k) => {
-                const zones = zonesFermees(p.jour.plage, debut, fin);
-                const ferme = zones.length === 1 && zones[0].debut === debut && zones[0].fin === fin;
-                const g = colonnesCases[k];
-                return (
-                  <Colonne key={p.cle} k={k} w={w} bord={k > 0}>
-                    {zones.map((z) => (
+          {/* Les colonnes défilent à l’horizontale ; la gouttière des heures reste à gauche. */}
+          <View style={{ position: 'absolute', left: GOUTTIERE, right: 0, top: 0, bottom: 0 }}>
+            <Animated.ScrollView
+              ref={defilementX}
+              horizontal
+              style={{ flex: 1 }}
+              contentContainerStyle={{ height: '100%' }}
+              onScroll={surDefilementX}
+              onContentSizeChange={surTailleContenuX}
+              scrollEventThrottle={16}
+              scrollEnabled={!pince}
+              scrollToOverflowEnabled
+              showsHorizontalScrollIndicator={false}
+              bounces={false}
+              snapToInterval={wRepos > 0 ? wRepos : undefined}
+              decelerationRate="fast">
+              <Animated.View style={largeurContenuX}>
+                {colonnesCases.map((g, k) => (
+                  <Colonne key={g.cle} k={k} w={w}>
+                    {g.zones.map((z) => (
                       <ZoneFermee key={`f${z.debut}`} zone={z} debut={debut} h={h} />
                     ))}
-                    {ferme ? (
+                    {g.ferme ? (
                       <View pointerEvents="none" className="absolute left-0 right-0 items-center" style={{ top: HAUT + 6 }}>
                         <Text maxFontSizeMultiplier={1.2} className="text-[11px] font-semibold text-faint dark:text-faint-dark">
                           Fermé
                         </Text>
                       </View>
                     ) : null}
-                    {g ? casesDe(g) : null}
+                    {g.places.map((place) => (
+                      <CaseAnimee
+                        key={place.id}
+                        place={place}
+                        debut={debut}
+                        h={h}
+                        hauteurRepos={hRepos}
+                        etroite={place.etendue < place.nbColonnes || (wRepos * place.etendue) / place.nbColonnes < LARGEUR_CASE_ETROITE}
+                        intervention={g.parId.get(place.id)!}
+                        champs={champs}
+                        couleur={couleur}
+                        clientDe={props.clientDe}
+                        vehiculeDe={props.vehiculeDe}
+                        mecanicienDe={props.mecanicienDe}
+                        onOuvrir={props.onOuvrir}
+                        onActions={props.onActions}
+                      />
+                    ))}
                   </Colonne>
-                );
-              })
-            )}
+                ))}
+                {surMaintenant ? (
+                  <Maintenant minutes={minutesMaintenant} debut={debut} h={h} w={w} colonne={equipe ? null : rangAujourdhui} nb={nbColonnes} />
+                ) : null}
+              </Animated.View>
+            </Animated.ScrollView>
           </View>
-          {equipeFermee ? (
-            <View pointerEvents="none" className="absolute right-0 items-center" style={{ left: GOUTTIERE, top: HAUT + 6 }}>
-              <Text maxFontSizeMultiplier={1.2} className="text-[11px] font-semibold text-faint dark:text-faint-dark">
-                Fermé
-              </Text>
-            </View>
-          ) : null}
-          {maintenantVisible ? <Maintenant minutes={minutesMaintenant} debut={debut} h={h} colonne={equipe ? null : rangAujourdhui} w={w} /> : null}
         </Animated.View>
       </Animated.ScrollView>
     </Animated.View>
@@ -1017,85 +885,32 @@ export function GrilleHoraire(props: Props) {
 
   return (
     <View className="flex-1">
-      {/* Bande « Hors créneau », seulement s’il y en a. Sans en-têtes au-dessus des cases, un filet la sépare des cases qui défilent dessous. */}
-      <View className={equipe || plusieursJours ? '' : 'border-b border-line dark:border-line-dark'}>
-        {horsCreneau.length ? (
-          <View className="pb-2 pl-4 pt-1">
-            <Etiquette className="mb-1">Hors créneau · {horsCreneau.length}</Etiquette>
-            <BandeHorsCreneau liste={horsCreneau} vehiculeDe={props.vehiculeDe} onOuvrir={props.onOuvrir} onActions={props.onActions} />
-          </View>
-        ) : null}
-      </View>
+      {/* Bande « Hors créneau », seulement s’il y en a (et pas en paysage, où la hauteur manque). */}
+      {horsCreneau.length && !props.sansHorsCreneau ? (
+        <View className="pb-2 pl-4 pt-1">
+          <Etiquette className="mb-1">Hors créneau · {horsCreneau.length}</Etiquette>
+          <BandeHorsCreneau liste={horsCreneau} vehiculeDe={props.vehiculeDe} onOuvrir={props.onOuvrir} onActions={props.onActions} />
+        </View>
+      ) : null}
       {Platform.OS === 'web' ? null : (
-        // Le zoom sans pincement : deux éléments réglables, sans place à l’écran.
-        <>
-          <View
-            accessible
-            accessibilityRole="adjustable"
-            accessibilityLabel="Zoom des heures"
-            accessibilityValue={{ text: `${Math.round((repos / ZOOM_MAX) * 100)} %` }}
-            accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-            onAccessibilityAction={(e) => {
-              if (e.nativeEvent.actionName === 'increment') zoomer(PAS_ZOOM);
-              if (e.nativeEvent.actionName === 'decrement') zoomer(1 / PAS_ZOOM);
-            }}
-            style={{ height: 1 }}
-          />
-          <View
-            accessible
-            accessibilityRole="adjustable"
-            accessibilityLabel={equipe ? 'Largeur des colonnes' : 'Jours côte à côte'}
-            accessibilityValue={{ text: equipe ? `${Math.round(largeurRepos)} points` : pluriel(n, 'jour') }}
-            accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-            onAccessibilityAction={(e) => {
-              if (e.nativeEvent.actionName === 'increment') elargirAccessible(1);
-              if (e.nativeEvent.actionName === 'decrement') elargirAccessible(-1);
-            }}
-            style={{ height: 1 }}
-          />
-        </>
+        // Le zoom sans pincement : un élément réglable, sans place à l’écran.
+        <View
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel="Zoom de la grille"
+          accessibilityValue={{ text: `${Math.round(niveau * 100)} %` }}
+          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+          onAccessibilityAction={(e) => {
+            const sens = e.nativeEvent.actionName === 'increment' ? 1 : e.nativeEvent.actionName === 'decrement' ? -1 : 0;
+            if (!sens) return;
+            // Le centre de la zone visible reste en place.
+            const nt = zoomer(niveau + sens * PAS_ACCESSIBLE, disponible / 2, hauteurVue / 2);
+            if (nt !== null) finZoom(nt);
+          }}
+          style={{ height: 1 }}
+        />
       )}
-
-      {plusieursJours ? (
-        <View className="border-b border-line dark:border-line-dark" style={{ paddingLeft: GOUTTIERE, paddingRight: MARGE_DROITE, paddingBottom: 4 }}>
-          <View style={{ height: HAUTEUR_ENTETE_JOURS, overflow: 'hidden' }}>
-            {rendus.map((p, k) => {
-              const zones = zonesFermees(p.jour.plage, debut, fin);
-              return (
-                <EnTeteJour
-                  key={p.cle}
-                  k={k}
-                  w={w}
-                  date={p.jour.date}
-                  aujourdhui={memeJour(p.jour.date, maintenant)}
-                  choisi={memeJour(p.jour.date, jourChoisi)}
-                  ferme={zones.length === 1 && zones[0].debut === debut && zones[0].fin === fin}
-                  court={largeurRepos < LARGEUR_JOUR_COURT}
-                  onPress={() => onChoisirJour(p.jour.date)}
-                />
-              );
-            })}
-          </View>
-        </View>
-      ) : null}
-
-      {equipe ? (
-        <View className="overflow-hidden border-b border-line dark:border-line-dark" style={{ paddingLeft: GOUTTIERE, height: HAUTEUR_ENTETE_EQUIPE }}>
-          <Animated.View style={[{ flex: 1 }, enTeteSuit]}>
-            {colonnes.map((c, k) => (
-              <EnTeteMembre
-                key={c.membre?.id ?? 'a-attribuer'}
-                k={k}
-                w={w}
-                colonne={c}
-                largeur={largeurRepos}
-                nbAAttribuer={(parJour[0]?.jour.interventions ?? []).filter((i) => !i.membreId && i.statut !== 'livre' && i.statut !== 'annule').length}
-              />
-            ))}
-          </Animated.View>
-        </View>
-      ) : null}
-
+      {enTete}
       {Platform.OS === 'web' ? (
         <View ref={cadreWeb} className="flex-1">
           {grille}
@@ -1104,22 +919,19 @@ export function GrilleHoraire(props: Props) {
         <GestureDetector gesture={pincement}>{grille}</GestureDetector>
       )}
       {astuceVisible ? (
-        <Animated.View
-          entering={FadeIn.duration(180)}
-          exiting={FadeOut.duration(180)}
-          pointerEvents="none"
-          className="absolute left-0 right-0 items-center px-4"
-          style={{ bottom: margeBasse + 8 }}>
-          <View className="rounded-full border border-line bg-surface2 px-3 py-1.5 dark:border-line-dark dark:bg-surface2-dark">
-            <Legende className="text-[12px]" numberOfLines={1}>
-              {texteAstuce}
-            </Legende>
-          </View>
-        </Animated.View>
+        <View pointerEvents="none" className="absolute left-0 right-0 items-center px-4" style={{ bottom: margeBasse + 8 }}>
+          <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(180)}>
+            <View className="rounded-full border border-line bg-surface2 px-3 py-1.5 dark:border-line-dark dark:bg-surface2-dark">
+              <Legende className="text-[12px]" numberOfLines={1}>
+                {texteAstuce}
+              </Legende>
+            </View>
+          </Animated.View>
+        </View>
       ) : null}
       {nbCases === 0 ? (
         <View pointerEvents="none" className="absolute left-0 right-0 items-center" style={{ top: '45%' }}>
-          <Legende ton="faint">{n > 1 ? 'Aucun créneau sur ces jours' : 'Aucun créneau ce jour'}</Legende>
+          <Legende ton="faint">{equipe ? 'Aucun créneau ce jour' : 'Aucun créneau cette semaine'}</Legende>
         </View>
       ) : null}
     </View>

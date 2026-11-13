@@ -71,7 +71,7 @@ export default function RootLayout() {
 
   return (
     // Chaque appui remonte ici : un avis à bouton se pose loin du doigt (components/ui/dernier-appui.ts ; web : pointerdown).
-    <GestureHandlerRootView style={{ flex: 1 }} onTouchStart={Platform.OS === 'web' ? undefined : (e) => noterAppui(e.nativeEvent.pageY)}>
+    <GestureHandlerRootView style={{ flex: 1 }} onTouchStart={Platform.OS === 'web' ? undefined : (e) => noterAppui(e.nativeEvent.pageY, e.nativeEvent.pageX)}>
       <KeyboardProvider>
         <ThemeProvider value={theme}>
           <StatusBar style={sombre ? 'light' : 'dark'} />

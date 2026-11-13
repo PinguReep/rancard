@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/theme/tokens';
 
+import { positionDernierAppui } from './dernier-appui';
 import { VERRE_LIQUIDE, Verre } from './verre';
 
 type Props = {
@@ -75,10 +76,18 @@ export function Bulle({ ouverte, onFermer, ancre, largeur = 320, label, children
         avancee.value = 0;
         avancee.value = withSpring(1, { damping: 26, stiffness: 260, mass: 1 });
       };
+      // Le bouton vient d’être touché : ce point fait foi si la mesure manque ou tombe ailleurs
+      // (sur iPhone, la mesure d’une vue sous les onglets natifs peut revenir à zéro).
+      const appui = positionDernierAppui();
+      const retenir = (m: Cadre | null): Cadre | null => {
+        if (!appui) return m;
+        const dedans = m !== null && appui.x >= m.x - 24 && appui.x <= m.x + m.l + 24 && appui.y >= m.y - 24 && appui.y <= m.y + m.h + 24;
+        return dedans ? m : { x: appui.x - 22, y: appui.y - 22, l: 44, h: 44 };
+      };
       const vue = ancre.current;
       if (vue && typeof vue.measureInWindow === 'function') {
-        vue.measureInWindow((x, y, l, h) => montrer(Number.isFinite(x) && l > 0 ? { x, y, l, h } : null));
-      } else montrer(null);
+        vue.measureInWindow((x, y, l, h) => montrer(retenir(Number.isFinite(x) && l > 0 ? { x, y, l, h } : null)));
+      } else montrer(retenir(null));
       return undefined;
     }
     avancee.value = withTiming(0, { duration: SORTIE_BULLE_MS });
@@ -100,14 +109,25 @@ export function Bulle({ ouverte, onFermer, ancre, largeur = 320, label, children
   // Trop bas (paysage, bouton en bas d’écran) : le panneau s’ouvre au-dessus du bouton.
   const auDessus = placeDessous < 220 && c.y - insets.top - MARGE - 8 > placeDessous;
   const hauteurMax = Math.max(160, auDessus ? c.y - insets.top - MARGE - 8 : placeDessous);
-  const origine = `${auDessus ? 'bottom' : 'top'} ${aDroite ? 'right' : 'left'}`;
 
-  const voile = useAnimatedStyle(() => ({ opacity: avancee.value }));
+  // Une vue animée ne porte ici que son style animé : sur iPhone, un style fixe posé à côté d’un style
+  // animé (tableau de styles) n’était pas appliqué, et le panneau sortait en haut, sur toute la largeur.
+  // La place du panneau est donc donnée par une vue ordinaire ; l’échelle part du coin du bouton grâce
+  // à un glissement qui compense le rétrécissement autour du centre.
+  const hauteurPanneau = useSharedValue(0);
+  const voile = useAnimatedStyle(() => ({ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.22)', opacity: avancee.value }));
   // Le verre ne supporte pas d’être estompé par un parent : seule l’échelle l’anime, le contenu fond à part.
-  const panneau = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(avancee.value, [0, 1], [0.2, 1]) }],
-    opacity: VERRE_LIQUIDE ? 1 : interpolate(avancee.value, [0, 0.4], [0, 1], 'clamp'),
-  }));
+  const panneau = useAnimatedStyle(() => {
+    const e = interpolate(avancee.value, [0, 1], [0.2, 1]);
+    return {
+      transform: [
+        { translateX: ((aDroite ? 1 : -1) * l * (1 - e)) / 2 },
+        { translateY: ((auDessus ? 1 : -1) * hauteurPanneau.value * (1 - e)) / 2 },
+        { scale: e },
+      ],
+      opacity: VERRE_LIQUIDE ? 1 : interpolate(avancee.value, [0, 0.4], [0, 1], 'clamp'),
+    };
+  });
   const contenu = useAnimatedStyle(() => ({ opacity: interpolate(avancee.value, [0.35, 1], [0, 1], 'clamp') }));
 
   const fermer = () => {
@@ -132,32 +152,32 @@ export function Bulle({ ouverte, onFermer, ancre, largeur = 320, label, children
       statusBarTranslucent
       supportedOrientations={['portrait', 'landscape']}>
       <View className="flex-1" accessibilityViewIsModal>
-        <Animated.View style={[{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0, 0, 0, 0.22)' }, voile]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Fermer" className="flex-1" onPress={fermer} />
-        </Animated.View>
-        <Animated.View
+        <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}>
+          <Animated.View style={voile}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Fermer" className="flex-1" onPress={fermer} />
+          </Animated.View>
+        </View>
+        <View
           accessibilityLabel={label}
-          style={[
-            {
-              position: 'absolute',
-              left: gauche,
-              width: l,
-              borderRadius: RAYON,
-              transformOrigin: origine,
-              boxShadow: `0px 12px 32px rgba(0, 0, 0, ${sombre ? 0.5 : 0.18})`,
-            },
-            auDessus ? { bottom: fenetre.height - c.y + 8 } : { top: dessous },
-            panneau,
-          ]}>
-          {opaque ? (
-            <View style={{ borderRadius: RAYON, overflow: 'hidden', backgroundColor: t.surface, borderWidth: 1, borderColor: t.line }}>{interieur}</View>
-          ) : (
-            <Verre style={{ borderRadius: RAYON, overflow: 'hidden' }}>
-              {/* Sous un flou simple, un voile garde le texte lisible au-dessus des cartes ; le Liquid Glass s’en charge seul. */}
-              <View style={VERRE_LIQUIDE ? undefined : { backgroundColor: sombre ? 'rgba(23, 28, 37, 0.72)' : 'rgba(255, 255, 255, 0.74)' }}>{interieur}</View>
-            </Verre>
-          )}
-        </Animated.View>
+          onLayout={(e) => {
+            hauteurPanneau.value = e.nativeEvent.layout.height;
+          }}
+          style={[{ position: 'absolute', left: gauche, width: l }, auDessus ? { bottom: fenetre.height - c.y + 8 } : { top: dessous }]}>
+          <Animated.View style={panneau}>
+            <View style={{ borderRadius: RAYON, boxShadow: `0px 12px 32px rgba(0, 0, 0, ${sombre ? 0.5 : 0.18})` }}>
+              {opaque ? (
+                <View style={{ borderRadius: RAYON, overflow: 'hidden', backgroundColor: t.surface, borderWidth: 1, borderColor: t.line }}>{interieur}</View>
+              ) : (
+                <Verre style={{ borderRadius: RAYON, overflow: 'hidden' }}>
+                  {/* Sous un flou simple, un voile garde le texte lisible au-dessus des cartes ; le Liquid Glass s’en charge seul. */}
+                  <View style={VERRE_LIQUIDE ? undefined : { backgroundColor: sombre ? 'rgba(23, 28, 37, 0.72)' : 'rgba(255, 255, 255, 0.74)' }}>
+                    {interieur}
+                  </View>
+                </Verre>
+              )}
+            </View>
+          </Animated.View>
+        </View>
       </View>
     </Modal>
   );

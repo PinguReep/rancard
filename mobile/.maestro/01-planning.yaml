@@ -1,0 +1,72 @@
+# Parcours du planning en démonstration : chaque capture est publiée par
+# .github/workflows/ios-simulateur.yml. Les libellés sont ceux de l’app.
+appId: ${APP_ID}
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Essayer avec le garage de démonstration"
+    timeout: 120000
+- takeScreenshot: 00-connexion
+- tapOn: "Essayer avec le garage de démonstration"
+- extendedWaitUntil:
+    visible: "Planning"
+    timeout: 60000
+- waitForAnimationToEnd
+- takeScreenshot: 01-planning-liste
+
+# Bulle « Affichage » : elle doit s’ouvrir sous son bouton.
+- tapOn: "Affichage du planning.*"
+- waitForAnimationToEnd
+- takeScreenshot: 02-bulle-affichage
+- tapOn: 'Journée\..*'
+- waitForAnimationToEnd
+- takeScreenshot: 03-journee
+
+# Défilement parti d’une zone vide de la grille.
+- swipe:
+    start: 60%, 80%
+    end: 60%, 50%
+- waitForAnimationToEnd
+- takeScreenshot: 04-journee-defilee
+
+- tapOn: "Affichage du planning.*"
+- waitForAnimationToEnd
+- tapOn: 'Équipe\..*'
+- waitForAnimationToEnd
+- takeScreenshot: 05-equipe
+
+# Retour à la liste, ouverture d’une fiche, défilement parti de la marge (zone vide).
+- tapOn: "Affichage du planning.*"
+- waitForAnimationToEnd
+- tapOn: 'Liste\..*'
+- waitForAnimationToEnd
+- tapOn:
+    point: 50%, 50%
+- waitForAnimationToEnd
+- takeScreenshot: 06-fiche
+- swipe:
+    start: 2%, 75%
+    end: 2%, 35%
+- waitForAnimationToEnd
+- takeScreenshot: 07-fiche-defilee
+
+# Feuille d’actions rapides (appui long sur une carte) : fond plein, marge basse.
+- tapOn:
+    text: "Retour"
+    optional: true
+- waitForAnimationToEnd
+
+# Un geste sur une carte : l’avis (pastille) doit se poser en bas ou en haut, jamais au milieu.
+- tapOn:
+    text: "Confirmer"
+    optional: true
+- takeScreenshot: 08a-avis-apres-geste
+- waitForAnimationToEnd
+
+- longPressOn:
+    point: 50%, 50%
+- waitForAnimationToEnd
+- takeScreenshot: 08-feuille-actions
