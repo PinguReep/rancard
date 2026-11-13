@@ -1,0 +1,41 @@
+Running on iPhone 17 Pro - iOS 26.4 - 2CC7A2C1-E1A7-4633-911A-DB60BDEB97F0
+ > Flow 01-planning
+Launch app "${APP_ID}" with clear state... COMPLETED
+Assert that "Essayer avec le garage de démonstration" is visible... COMPLETED
+Take screenshot 00-connexion... COMPLETED
+Tap on "Essayer avec le garage de démonstration"... COMPLETED
+Assert that "Planning" is visible... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 01-planning-liste... COMPLETED
+Tap on "Affichage du planning.*"... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 02-bulle-affichage... COMPLETED
+Tap on "Journée\..*"... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 03-journee... COMPLETED
+Swipe from (60%, 80%) to (60%, 50%) in 400 ms... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 04-journee-defilee... COMPLETED
+Tap on "Affichage du planning.*"... COMPLETED
+Wait for animation to end... COMPLETED
+Tap on "Équipe\..*"... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 05-equipe... COMPLETED
+Tap on "Affichage du planning.*"... COMPLETED
+Wait for animation to end... COMPLETED
+Tap on "Liste\..*"... COMPLETED
+Wait for animation to end... COMPLETED
+Tap on point (50%, 50%)... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 06-fiche... COMPLETED
+Swipe from (2%, 75%) to (2%, 35%) in 400 ms... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 07-fiche-defilee... COMPLETED
+Tap on (Optional) "Retour"... COMPLETED
+Wait for animation to end... COMPLETED
+Tap on (Optional) "Confirmer"... WARNED
+Take screenshot 08a-avis-apres-geste... COMPLETED
+Wait for animation to end... COMPLETED
+Long press on point (50%, 50%)... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 08-feuille-actions... COMPLETED

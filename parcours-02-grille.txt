@@ -1,0 +1,43 @@
+Running on iPhone 17 Pro - iOS 26.4 - 2CC7A2C1-E1A7-4633-911A-DB60BDEB97F0
+ > Flow 02-grille
+Launch app "${APP_ID}"... COMPLETED
+Assert that "Planning" is visible... COMPLETED
+Open rencar:///planning?vue=journee&zoom=1... COMPLETED
+Tap on (Optional) "Open|Ouvrir"... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 10-journee-un-jour... COMPLETED
+Open rencar:///planning?vue=journee&zoom=0.5... COMPLETED
+Tap on (Optional) "Open|Ouvrir"... WARNED
+Wait for animation to end... COMPLETED
+Take screenshot 11-journee-zoom-moyen... COMPLETED
+Swipe from (85%, 70%) to (25%, 70%) in 400 ms... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 12-journee-defilee-en-largeur... COMPLETED
+Swipe from (60%, 80%) to (60%, 50%) in 400 ms... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 13-journee-defilee-en-hauteur... COMPLETED
+Open rencar:///planning?vue=journee&zoom=0... COMPLETED
+Tap on (Optional) "Open|Ouvrir"... WARNED
+Wait for animation to end... COMPLETED
+Take screenshot 14-semaine... COMPLETED
+Open rencar:///planning?vue=equipe&zoom=0.4... COMPLETED
+Tap on (Optional) "Open|Ouvrir"... WARNED
+Wait for animation to end... COMPLETED
+Take screenshot 15-equipe... COMPLETED
+Open rencar:///planning?vue=equipe&zoom=1... COMPLETED
+Tap on (Optional) "Open|Ouvrir"... WARNED
+Wait for animation to end... COMPLETED
+Take screenshot 16-equipe-une-colonne... COMPLETED
+Tap on "Affichage du planning.*"... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 17-bulle-sur-grille... COMPLETED
+Tap on "Journée\..*"... COMPLETED
+Wait for animation to end... COMPLETED
+Open rencar:///planning?vue=journee&zoom=0... COMPLETED
+Tap on (Optional) "Open|Ouvrir"... WARNED
+Set orientation LANDSCAPE_LEFT... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 18-paysage-semaine... COMPLETED
+Set orientation PORTRAIT... COMPLETED
+Wait for animation to end... COMPLETED
+Take screenshot 19-retour-portrait... COMPLETED

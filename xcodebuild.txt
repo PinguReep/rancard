@@ -1,0 +1,120 @@
+sent 1813218 bytes  received 98 bytes  69475708 bytes/sec
+total size is 1812376  speedup is 1.00
+Stripped /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Frameworks/ExpoModulesJSI.framework/ExpoModulesJSI of architectures: x86_64
+rsync --delete -av --filter P .*.?????? --links --filter "- CVS/" --filter "- .svn/" --filter "- .git/" --filter "- .hg/" --filter "- Headers" --filter "- PrivateHeaders" --filter "- Modules" "/Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/XCFrameworkIntermediates/ExpoModulesWorklets/ExpoModulesWorklets.framework" "/Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Frameworks"
+Transfer starting: 5 files
+ExpoModulesWorklets.framework/
+ExpoModulesWorklets.framework/ExpoModulesWorklets
+ExpoModulesWorklets.framework/Info.plist
+ExpoModulesWorklets.framework/_CodeSignature/
+ExpoModulesWorklets.framework/_CodeSignature/CodeResources
+
+sent 298978 bytes  received 98 bytes  29611485 bytes/sec
+total size is 298290  speedup is 1.00
+Stripped /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Frameworks/ExpoModulesWorklets.framework/ExpoModulesWorklets of architectures: x86_64
+rsync --delete -av --filter P .*.?????? --links --filter "- CVS/" --filter "- .svn/" --filter "- .git/" --filter "- .hg/" --filter "- Headers" --filter "- PrivateHeaders" --filter "- Modules" "/Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/XCFrameworkIntermediates/React-Core-prebuilt/React.framework" "/Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Frameworks"
+Transfer starting: 5 files
+React.framework/
+React.framework/Info.plist
+React.framework/React
+React.framework/_CodeSignature/
+React.framework/_CodeSignature/CodeResources
+
+sent 24457386 bytes  received 98 bytes  108651639 bytes/sec
+total size is 24453834  speedup is 1.00
+Stripped /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Frameworks/React.framework/React of architectures: x86_64
+rsync --delete -av --filter P .*.?????? --links --filter "- CVS/" --filter "- .svn/" --filter "- .git/" --filter "- .hg/" --filter "- Headers" --filter "- PrivateHeaders" --filter "- Modules" "/Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/XCFrameworkIntermediates/ReactNativeDependencies/ReactNativeDependencies.framework" "/Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Frameworks"
+Transfer starting: 32 files
+ReactNativeDependencies.framework/
+ReactNativeDependencies.framework/Info.plist
+ReactNativeDependencies.framework/ReactNativeDependencies
+ReactNativeDependencies.framework/ReactNativeDependencies_boost.bundle/
+ReactNativeDependencies.framework/ReactNativeDependencies_boost.bundle/Info.plist
+ReactNativeDependencies.framework/ReactNativeDependencies_boost.bundle/PrivacyInfo.xcprivacy
+ReactNativeDependencies.framework/ReactNativeDependencies_boost.bundle/_CodeSignature/
+ReactNativeDependencies.framework/ReactNativeDependencies_boost.bundle/_CodeSignature/CodeDirectory
+ReactNativeDependencies.framework/ReactNativeDependencies_boost.bundle/_CodeSignature/CodeRequirements
+ReactNativeDependencies.framework/ReactNativeDependencies_boost.bundle/_CodeSignature/CodeRequirements-1
+ReactNativeDependencies.framework/ReactNativeDependencies_boost.bundle/_CodeSignature/CodeResources
+ReactNativeDependencies.framework/ReactNativeDependencies_boost.bundle/_CodeSignature/CodeSignature
+ReactNativeDependencies.framework/ReactNativeDependencies_folly.bundle/
+ReactNativeDependencies.framework/ReactNativeDependencies_folly.bundle/Info.plist
+ReactNativeDependencies.framework/ReactNativeDependencies_folly.bundle/PrivacyInfo.xcprivacy
+ReactNativeDependencies.framework/ReactNativeDependencies_folly.bundle/_CodeSignature/
+ReactNativeDependencies.framework/ReactNativeDependencies_folly.bundle/_CodeSignature/CodeDirectory
+ReactNativeDependencies.framework/ReactNativeDependencies_folly.bundle/_CodeSignature/CodeRequirements
+ReactNativeDependencies.framework/ReactNativeDependencies_folly.bundle/_CodeSignature/CodeRequirements-1
+ReactNativeDependencies.framework/ReactNativeDependencies_folly.bundle/_CodeSignature/CodeResources
+ReactNativeDependencies.framework/ReactNativeDependencies_folly.bundle/_CodeSignature/CodeSignature
+ReactNativeDependencies.framework/ReactNativeDependencies_glog.bundle/
+ReactNativeDependencies.framework/ReactNativeDependencies_glog.bundle/Info.plist
+ReactNativeDependencies.framework/ReactNativeDependencies_glog.bundle/PrivacyInfo.xcprivacy
+ReactNativeDependencies.framework/ReactNativeDependencies_glog.bundle/_CodeSignature/
+ReactNativeDependencies.framework/ReactNativeDependencies_glog.bundle/_CodeSignature/CodeDirectory
+ReactNativeDependencies.framework/ReactNativeDependencies_glog.bundle/_CodeSignature/CodeRequirements
+ReactNativeDependencies.framework/ReactNativeDependencies_glog.bundle/_CodeSignature/CodeRequirements-1
+ReactNativeDependencies.framework/ReactNativeDependencies_glog.bundle/_CodeSignature/CodeResources
+ReactNativeDependencies.framework/ReactNativeDependencies_glog.bundle/_CodeSignature/CodeSignature
+ReactNativeDependencies.framework/_CodeSignature/
+ReactNativeDependencies.framework/_CodeSignature/CodeResources
+
+sent 2492987 bytes  received 596 bytes  73125601 bytes/sec
+total size is 2487862  speedup is 1.00
+Stripped /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Frameworks/ReactNativeDependencies.framework/ReactNativeDependencies of architectures: x86_64
+rsync --delete -av --filter P .*.?????? --links --filter "- CVS/" --filter "- .svn/" --filter "- .git/" --filter "- .hg/" --filter "- Headers" --filter "- PrivateHeaders" --filter "- Modules" "/Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/XCFrameworkIntermediates/hermes-engine/Pre-built/hermesvm.framework" "/Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Frameworks"
+Transfer starting: 3 files
+hermesvm.framework/
+hermesvm.framework/Info.plist
+hermesvm.framework/hermesvm
+
+sent 10175718 bytes  received 70 bytes  119574477 bytes/sec
+total size is 10174074  speedup is 1.00
+Stripped /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Frameworks/hermesvm.framework/hermesvm of architectures: x86_64
+
+CopySwiftLibs /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app (in target 'Rencar' from project 'Rencar')
+    cd /Users/runner/work/rancard/rancard/mobile/ios
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Rencar --scan-folder /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Frameworks --scan-folder /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/PlugIns --scan-folder /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/SystemExtensions --scan-folder /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.Dh5Q47/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Intermediates.noindex/Rencar.build/Release-iphonesimulator/Rencar.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+Ignoring --strip-bitcode because --sign was not passed
+
+ExtractAppIntentsMetadata (in target 'Rencar' from project 'Rencar')
+    cd /Users/runner/work/rancard/rancard/mobile/ios
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.Dh5Q47/Metal.xctoolchain --module-name Rencar --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 16.4 --bundle-identifier com.example.rencar --output /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app --target-triple arm64-apple-ios16.4-simulator --binary-file /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Rencar --dependency-file /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Intermediates.noindex/Rencar.build/Release-iphonesimulator/Rencar.build/Objects-normal/arm64/Rencar_dependency_info.dat --stringsdata-file /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Intermediates.noindex/Rencar.build/Release-iphonesimulator/Rencar.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Intermediates.noindex/Rencar.build/Release-iphonesimulator/Rencar.build/Objects-normal/arm64/Rencar.SwiftFileList --metadata-file-list /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Intermediates.noindex/Rencar.build/Release-iphonesimulator/Rencar.build/Rencar.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Intermediates.noindex/Rencar.build/Release-iphonesimulator/Rencar.build/Rencar.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Intermediates.noindex/Rencar.build/Release-iphonesimulator/Rencar.build/Objects-normal/arm64/Rencar.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-11-13 04:04:19.939 appintentsmetadataprocessor[27729:74732] Starting appintentsmetadataprocessor export
+2026-11-13 04:04:19.987 appintentsmetadataprocessor[27729:74732] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+AppIntentsSSUTraining (in target 'Rencar' from project 'Rencar')
+    cd /Users/runner/work/rancard/rancard/mobile/ios
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Info.plist --temp-dir-path /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Intermediates.noindex/Rencar.build/Release-iphonesimulator/Rencar.build/ssu --bundle-id com.example.rencar --product-path /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app --extracted-metadata-path /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Metadata.appintents --metadata-file-list /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Intermediates.noindex/Rencar.build/Release-iphonesimulator/Rencar.build/Rencar.DependencyMetadataFileList --source-file /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app/Info.plist --archive-ssu-assets
+2026-11-13 04:04:20.030 appintentsnltrainingprocessor[27734:74742] Parsing options for appintentsnltrainingprocessor
+2026-11-13 04:04:20.032 appintentsnltrainingprocessor[27734:74742] Starting AppIntents SSU YAML Generation
+2026-11-13 04:04:20.040 appintentsnltrainingprocessor[27734:74742] No AppShortcuts found - Skipping.
+
+RegisterExecutionPolicyException /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app (in target 'Rencar' from project 'Rencar')
+    cd /Users/runner/work/rancard/rancard/mobile/ios
+    builtin-RegisterExecutionPolicyException /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app
+
+Validate /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app (in target 'Rencar' from project 'Rencar')
+    cd /Users/runner/work/rancard/rancard/mobile/ios
+    builtin-validationUtility /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app -validate-for-store -shallow-bundle -infoplist-subpath Info.plist
+
+Touch /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app (in target 'Rencar' from project 'Rencar')
+    cd /Users/runner/work/rancard/rancard/mobile/ios
+    /usr/bin/touch -c /Users/runner/work/rancard/rancard/mobile/ios/build/Build/Products/Release-iphonesimulator/Rencar.app
+
+warning: Run script build phase '[CP-User] [Hermes] Replace Hermes for the right configuration, if needed' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'hermes-engine' from project 'Pods')
+note: Run script build phase '[CP-User] [RNDeps] Replace React Native Dependencies for the right configuration, if needed' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'ReactNativeDependencies' from project 'Pods')
+note: Run script build phase '[CP-User] [RN]Check FBReactNativeSpec' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'React-RCTFBReactNativeSpec' from project 'Pods')
+note: Run script build phase '[CP-User] [RNCore] Replace React Native Core for the right configuration, if needed' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'React-Core-prebuilt' from project 'Pods')
+note: Run script build phase '[CP-User] [Expo] Switch ExpoModulesWorklets XCFramework for build configuration' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'ExpoModulesWorklets' from project 'Pods')
+note: Run script build phase '[CP-User] Build ExpoModulesJSI xcframework' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'ExpoModulesJSI' from project 'Pods')
+note: Run script build phase '[CP-User] [Expo] Switch ExpoModulesCore XCFramework for build configuration' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'ExpoModulesCore' from project 'Pods')
+note: Run script build phase '[CP-User] [Expo] Switch ExpoImage XCFramework for build configuration' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'ExpoImage' from project 'Pods')
+note: Run script build phase '[CP-User] [Expo] Switch ExpoFont XCFramework for build configuration' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'ExpoFont' from project 'Pods')
+note: Run script build phase '[CP-User] [Expo] Switch ExpoFileSystem XCFramework for build configuration' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'ExpoFileSystem' from project 'Pods')
+note: Run script build phase '[Expo] Configure project' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'Rencar' from project 'Rencar')
+note: Run script build phase 'Bundle React Native code and images' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'Rencar' from project 'Rencar')
+warning: Run script build phase '[Expo Dev Launcher] Strip Local Network Keys for Release' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'Rencar' from project 'Rencar')
+note: Run script build phase '[CP-User] Generate updates resources for expo-updates' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'EXUpdates' from project 'Pods')
+note: Run script build phase '[CP-User] Generate app.config for prebuilt Constants.manifest' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'EXConstants' from project 'Pods')
+** BUILD SUCCEEDED **
+
