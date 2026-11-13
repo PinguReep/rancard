@@ -32,6 +32,8 @@ jobs:
     env:
       EXPO_PUBLIC_BACKEND: demo
       MAESTRO_CLI_NO_ANALYTICS: "1"
+      # Le pilote iOS de Maestro met parfois plus de deux minutes à démarrer sur un Mac GitHub chargé.
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
       SORTIE: ${{ github.workspace }}/captures
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,7 +108,9 @@ jobs:
           code=0
           for f in "$GITHUB_WORKSPACE"/mobile/.maestro/*.yaml; do
             nom=$(basename "$f" .yaml)
-            if ! maestro --device "$UDID" test "$f" --env APP_ID="$APP_ID" > "$SORTIE/parcours-$nom.log" 2>&1; then
+            jouer() { maestro --device "$UDID" test "$f" --env APP_ID="$APP_ID" > "$SORTIE/parcours-$nom.log" 2>&1; }
+            # Un second essai si le pilote n'a pas démarré à temps : ce n'est pas un défaut de l'app.
+            if ! jouer && ! { grep -q 'driver not ready' "$SORTIE/parcours-$nom.log" && jouer; }; then
               code=1
               echo "::error::Parcours $nom en échec : $(tail -n 6 "$SORTIE/parcours-$nom.log" | tr '\n' ' ')"
               xcrun simctl io "$UDID" screenshot "$SORTIE/echec-$nom.png" || true
